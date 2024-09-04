@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = [
+    "cli",
+    "compreface/compreface-api",
+    "compreface/compreface-contracts",
+    "double-take/double-take-contracts",
+    "shared-api"
+, "shared-lib"]

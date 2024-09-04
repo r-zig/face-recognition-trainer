@@ -1,0 +1,8 @@
+target/
+*.lock
+node_modules/
+**/.env
+*.desc
+faces-train/
+faces-train/lfw_funneled/
+faces-train/known/

@@ -1,0 +1,8 @@
+[package]
+name = "shared-lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+compreface-api = { path = "../compreface/compreface-api" }
+shared-api = { path = "../shared-api" }

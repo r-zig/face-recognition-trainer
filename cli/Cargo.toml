@@ -1,0 +1,23 @@
+[package]
+name = "face-recognition-trainer-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ron Zigelman <roniz.net@gmail.com>"]
+
+[[bin]]
+name = "face-recognition-trainer-cli"
+
+[dependencies]
+compreface-api = { path = "../compreface/compreface-api"}
+shared-api = { path = "../shared-api" }
+tokio = "1.40.0"
+clap = { version = "4.5.4", features = ["derive", "env"] }
+dotenv = "0.15.0"
+tracing = "0.1.40"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter"] }
+tracing-bunyan-formatter = "0.3.4"
+tracing-log = "0.2.0"
+indicatif = "0.17.8"
+console = "0.15.8"
+anyhow = "1.0.86"

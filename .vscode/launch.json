@@ -1,0 +1,155 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'face-recognition-trainer-cli'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=face-recognition-trainer-cli",
+                    "--package=face-recognition-trainer-cli"
+                ],
+                "filter": {
+                    "name": "face-recognition-trainer-cli",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "--dataset-path",
+                "/home/ron/Documents/smart-home/faces-train/known",
+                "--client-type",
+                "compreface",
+                "--client-mode",
+                "train",
+                "--compreface-url",
+                "http://localhost:8080",
+                "--compreface-api-key",
+                "2b6a8351-059a-4ac9-b897-24bc726459e5",
+            ],
+            "cwd": "${workspaceFolder}",
+            "stopOnEntry": false,
+            "sourceLanguages": [
+                "rust"
+            ]
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'face-recognition-trainer-cli'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=face-recognition-trainer-cli",
+                    "--package=face-recognition-trainer-cli"
+                ],
+                "filter": {
+                    "name": "face-recognition-trainer-cli",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'compreface_api'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=compreface-api"
+                ],
+                "filter": {
+                    "name": "compreface_api",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'compreface_contracts'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=compreface-contracts"
+                ],
+                "filter": {
+                    "name": "compreface_contracts",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'shared_api'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=shared-api"
+                ],
+                "filter": {
+                    "name": "shared_api",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'double_take_contracts'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=double-take-contracts"
+                ],
+                "filter": {
+                    "name": "double_take_contracts",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'shared_lib'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=shared-lib"
+                ],
+                "filter": {
+                    "name": "shared_lib",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
