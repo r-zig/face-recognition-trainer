@@ -13,6 +13,7 @@ use tokio::fs;
 use tokio::sync::mpsc::Sender;
 use tracing::debug;
 
+#[derive(Default)]
 pub struct ComprefaceTrainLogic;
 
 impl ComprefaceTrainLogic {
@@ -93,7 +94,7 @@ impl TrainLogic for ComprefaceTrainLogic {
                 );
                     let current_items = files_content.len() as u64;
 
-                    match api_client.send_to_train(&name, files_content).await {
+                    match api_client.send_to_train(name, files_content).await {
                         Ok(_) => {
                             debug!(
                                 "files sent successfully to train the model under the name: {}",
@@ -117,7 +118,7 @@ impl TrainLogic for ComprefaceTrainLogic {
             }
             if !files_content.is_empty() {
                 let current_items = files_content.len() as u64;
-                match api_client.send_to_train(&name, files_content).await {
+                match api_client.send_to_train(name, files_content).await {
                     Ok(_) => {
                         debug!(
                             "files sent successfully to train the model under the name: {}",

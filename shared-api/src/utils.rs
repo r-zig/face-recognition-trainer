@@ -24,7 +24,7 @@ pub fn get_directory_name(group: &[Result<PathBuf, std::io::Error>]) -> anyhow::
             .ok_or(anyhow!("folder name not found on path: {:?}", path_buf))?
             .to_string_lossy()
             .into_owned();
-        return Ok(name);
+        Ok(name)
     } else {
         let name = path_buf
             .parent()

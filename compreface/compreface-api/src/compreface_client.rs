@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
 
 use anyhow::bail;
 use async_trait::async_trait;
@@ -7,7 +7,7 @@ use mime_guess::MimeGuess;
 use reqwest::{multipart::Part, Client};
 use serde::Deserialize;
 use shared_api::{RecognizeResult, Recognizer, Trainer};
-use tokio::{fs, io::AsyncReadExt, time::sleep};
+use tokio::{fs, io::AsyncReadExt};
 use tracing::{debug, error, warn};
 
 /// Comperface client supports handling communication with the Comperface API.
