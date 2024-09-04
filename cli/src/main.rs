@@ -1,7 +1,6 @@
 use compreface_api::train;
 use dotenv::dotenv;
 use indicatif::{MultiProgress, ProgressBar};
-use shared_api::TrainLogic;
 use shared_api::{ClientMode, Configuration, ProgressReporter};
 use tokio::task;
 use tracing::{debug, error, info};
@@ -42,11 +41,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let long_task = task::spawn(async move {
         match config.client_mode {
             ClientMode::Train => {
-                train::ComprefaceTrainLogic::train(&config, tx_progress).await?;
+                train(&config, tx_progress).await?;
             }
             ClientMode::Recognize => {
-                todo!();
-                // recognize(files_groups, &config, tx).await?;
+                // recognize::ComprefaceRecognizeLogic::recognize(&config, tx_progress).await?;
             }
         };
         anyhow::Result::<()>::Ok(()) // Explicit Ok return with specific type

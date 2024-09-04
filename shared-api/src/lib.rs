@@ -2,8 +2,10 @@ use async_trait::async_trait;
 use clap::{Parser, ValueEnum};
 use compreface_contracts::CompreFaceConfig;
 use double_take_contracts::DoubleTakeConfig;
-use std::path::PathBuf;
-use tokio::sync::mpsc::Sender;
+use futures::StreamExt;
+use std::{future::Future, path::PathBuf};
+use stream_utils::{BufferUntilCondition, RecursiveFileStream};
+use tokio::{fs, sync::mpsc::Sender};
 
 pub mod utils;
 /// Trainer trait
@@ -16,7 +18,26 @@ pub trait Trainer {
 
 #[async_trait]
 pub trait TrainLogic {
-    async fn train(config: &Configuration, tx: Sender<ProgressReporter>) -> anyhow::Result<()>;
+    async fn train(
+        &self,
+        config: &Configuration,
+        tx: Sender<ProgressReporter>,
+    ) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+impl<F, Fut> TrainLogic for F
+where
+    F: Fn(&Configuration, Sender<ProgressReporter>) -> Fut + Send + Sync,
+    Fut: Future<Output = anyhow::Result<()>> + Send,
+{
+    async fn train(
+        &self,
+        config: &Configuration,
+        tx: Sender<ProgressReporter>,
+    ) -> anyhow::Result<()> {
+        (self)(config, tx).await
+    }
 }
 
 /// Recognize trait
@@ -147,6 +168,79 @@ pub enum ClientType {
 pub enum ClientMode {
     Train,
     Recognize,
+}
+
+pub async fn process_files<F, Fut>(
+    config: &Configuration,
+    tx: Sender<ProgressReporter>,
+    api_action: F,
+) -> anyhow::Result<()>
+where
+    F: Fn(String, Vec<PathBuf>) -> Fut + Send + Sync,
+    Fut: Future<Output = anyhow::Result<()>> + Send,
+{
+    tx.send(ProgressReporter::Message(format!(
+        "Start processing directory: {}",
+        &config.dataset_path
+    )))
+    .await?;
+
+    let files = RecursiveFileStream::new(&config.dataset_path);
+    let mut files_groups = BufferUntilCondition::new(files, |path| path.as_ref().unwrap().is_dir());
+
+    while let Some(group) = files_groups.next().await {
+        let name = match config.override_trained_name {
+            Some(ref name) => name.to_string(),
+            None => utils::get_directory_name(&group)?,
+        };
+
+        tx.send(ProgressReporter::IncreaseLength(group.len() as u64))
+            .await?;
+        tx.send(ProgressReporter::Message(format!(
+            "processing directory: {}",
+            &name
+        )))
+        .await?;
+
+        let mut files_content: Vec<PathBuf> = Vec::new();
+        let mut total_size = 0;
+
+        for path in group.into_iter() {
+            let path_buf = path?;
+            if path_buf.is_dir() {
+                tx.send(ProgressReporter::Message(format!(
+                    "{}",
+                    path_buf.file_stem().unwrap().to_string_lossy()
+                )))
+                .await?;
+                continue;
+            }
+
+            if !utils::is_image(&path_buf) {
+                continue;
+            }
+
+            let file_len = fs::metadata(path_buf.clone()).await?.len();
+            if total_size + file_len > config.max_request_size {
+                let current_items = files_content.len() as u64;
+                api_action(name.clone(), files_content.clone()).await?;
+                tx.send(ProgressReporter::Increase(current_items)).await?;
+                files_content.clear();
+                total_size = 0;
+            }
+
+            total_size += file_len;
+            files_content.push(path_buf);
+        }
+
+        if !files_content.is_empty() {
+            let current_items = files_content.len() as u64;
+            api_action(name, files_content).await?;
+            tx.send(ProgressReporter::Increase(current_items)).await?;
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
