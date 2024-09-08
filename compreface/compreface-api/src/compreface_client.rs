@@ -6,7 +6,7 @@ use compreface_contracts::CompreFaceConfig;
 use mime_guess::MimeGuess;
 use reqwest::{multipart::Part, Client};
 use serde::Deserialize;
-use shared_api::{RecognizeResult, Recognizer, Trainer};
+use shared_api::{RecognizeResult, Recognizer, TrainResult, Trainer};
 use tokio::{fs, io::AsyncReadExt};
 use tracing::{debug, error, warn};
 
@@ -25,7 +25,7 @@ impl CompreFaceClient {
 
 #[async_trait]
 impl Trainer for CompreFaceClient {
-    async fn send_to_train(&self, name: &str, files: Vec<PathBuf>) -> anyhow::Result<()> {
+    async fn send_to_train(&self, name: &str, files: Vec<PathBuf>) -> anyhow::Result<TrainResult> {
         // this is postman example: {{compreface_base_url}}/api/v1/recognition/faces?subject={{subject_name}}
         let url = format!(
             "{}/api/v1/recognition/faces?subject={}",
@@ -117,7 +117,7 @@ impl Trainer for CompreFaceClient {
                 }
             }
         }
-        Ok(())
+        Ok(TrainResult {})
     }
 }
 
@@ -164,13 +164,12 @@ impl Recognizer for CompreFaceClient {
             if response
                 .result
                 .iter()
-                .all(|r| r.subjects.iter().all(|s| s.subject != name))
+                .any(|r| r.subjects.iter().any(|s| s.subject == name))
             {
+                recognition_result.success_count += 1;
+            } else {
                 recognition_result.failure_count += 1;
                 recognition_result.unrecognized.push(file_path);
-                continue;
-            } else {
-                recognition_result.success_count += 1;
             }
         }
         Ok(recognition_result)
@@ -184,21 +183,21 @@ struct RecognitionApiResponse {
 
 #[derive(Deserialize, Debug)]
 struct ResultItem {
-    r#box: DetectionBox,
+    r#_box: DetectionBox,
     subjects: Vec<Subject>,
 }
 
 #[derive(Deserialize, Debug)]
 struct DetectionBox {
-    probability: f64,
-    x_max: u32,
-    y_max: u32,
-    x_min: u32,
-    y_min: u32,
+    _probability: f64,
+    _x_max: u32,
+    _y_max: u32,
+    _x_min: u32,
+    _y_min: u32,
 }
 
 #[derive(Deserialize, Debug)]
 struct Subject {
     subject: String,
-    similarity: f64,
+    _similarity: f64,
 }

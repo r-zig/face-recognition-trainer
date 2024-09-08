@@ -25,7 +25,7 @@
                 "--client-type",
                 "compreface",
                 "--client-mode",
-                "train",
+                "recognize",
                 "--compreface-url",
                 "http://localhost:8080",
                 "--compreface-api-key",

@@ -19,7 +19,7 @@ export COMPREFACE_URL=${COMPREFACE_URL:-http://localhost:8080}
 export COMPREFACE_API_KEY=${COMPREFACE_API_KEY:-"2b6a8351-059a-4ac9-b897-24bc726459e5"}
 
 # override the trained name per folder
-export OVERRIDE_TRAINED_NAME=${OVERRIDE_TRAINED_NAME:-"uknown"}
+# export OVERRIDE_TRAINED_NAME=${OVERRIDE_TRAINED_NAME:-"uknown"}
 
 # Check if RUST_LOG is not set
 if [ -z "$RUST_LOG" ]; then
@@ -30,4 +30,4 @@ if [ -z "$RUST_LOG" ]; then
     export RUST_LOG="info"
 fi
 
-cargo run --bin face-recognition-trainer-cli -- --client-type compreface --client-mode train
+cargo run --bin face-recognition-trainer-cli -- --client-type compreface --client-mode recognize | bunyan --color

@@ -3,7 +3,11 @@ use clap::{Parser, ValueEnum};
 use compreface_contracts::CompreFaceConfig;
 use double_take_contracts::DoubleTakeConfig;
 use futures::StreamExt;
-use std::{future::Future, path::PathBuf};
+use std::{
+    fmt::{Display, Formatter},
+    future::Future,
+    path::PathBuf,
+};
 use stream_utils::{BufferUntilCondition, RecursiveFileStream};
 use tokio::{fs, sync::mpsc::Sender};
 
@@ -13,7 +17,7 @@ pub mod utils;
 /// The function send instructions to the destination to train the model, but the train itself is async
 #[async_trait]
 pub trait Trainer {
-    async fn send_to_train(&self, name: &str, files: Vec<PathBuf>) -> anyhow::Result<()>;
+    async fn send_to_train(&self, name: &str, files: Vec<PathBuf>) -> anyhow::Result<TrainResult>;
 }
 
 #[async_trait]
@@ -21,25 +25,33 @@ pub trait TrainLogic {
     async fn train(
         &self,
         config: &Configuration,
-        tx: Sender<ProgressReporter>,
-    ) -> anyhow::Result<()>;
+        tx: Sender<ProgressReporter<TrainResult>>,
+    ) -> anyhow::Result<TrainResult>;
 }
 
 #[async_trait]
 impl<F, Fut> TrainLogic for F
 where
-    F: Fn(&Configuration, Sender<ProgressReporter>) -> Fut + Send + Sync,
-    Fut: Future<Output = anyhow::Result<()>> + Send,
+    F: Fn(&Configuration, Sender<ProgressReporter<TrainResult>>) -> Fut + Send + Sync,
+    Fut: Future<Output = anyhow::Result<TrainResult>> + Send,
 {
     async fn train(
         &self,
         config: &Configuration,
-        tx: Sender<ProgressReporter>,
-    ) -> anyhow::Result<()> {
+        tx: Sender<ProgressReporter<TrainResult>>,
+    ) -> anyhow::Result<TrainResult> {
         (self)(config, tx).await
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct TrainResult {}
+
+impl Display for TrainResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Training completed")
+    }
+}
 /// Recognize trait
 /// This trait is used to recognize faces in a set of images and a given name
 #[async_trait]
@@ -48,6 +60,7 @@ pub trait Recognizer {
 }
 
 /// RecognizeResult struct to hold the result of the recognition
+#[derive(Debug)]
 pub struct RecognizeResult {
     /// The total number of faces that were queried
     pub total_count: usize,
@@ -62,6 +75,19 @@ pub struct RecognizeResult {
     pub unrecognized: Vec<PathBuf>,
 }
 
+impl Display for RecognizeResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "%success: {}, Total: {}, Success: {}, Failure: {}, Unrecognized: {}",
+            self.get_success_percentage(),
+            self.total_count,
+            self.success_count,
+            self.failure_count,
+            self.unrecognized.len()
+        )
+    }
+}
 impl RecognizeResult {
     pub fn with_capacity(total_count: usize) -> Self {
         RecognizeResult {
@@ -90,14 +116,30 @@ impl RecognizeResult {
     }
 }
 
+impl Clone for RecognizeResult {
+    fn clone(&self) -> Self {
+        RecognizeResult {
+            total_count: self.total_count,
+            success_count: self.success_count,
+            failure_count: self.failure_count,
+            unrecognized: self.unrecognized.clone(),
+        }
+    }
+}
 /// ProgressReporter enum to report the progress of the training or recognition operation
-pub enum ProgressReporter {
+pub enum ProgressReporter<T>
+where
+    T: Clone + std::marker::Sync + std::marker::Send + 'static,
+{
     /// Increase the progress fill by the given value
     Increase(u64),
     /// Increase the progress length by the given value
     IncreaseLength(u64),
     /// Set the progress message
     Message(String),
+
+    /// Current custom value
+    StructedMessage(T),
     /// Finish the progress with the given message
     FinishWithMessage(String),
 }
@@ -170,14 +212,15 @@ pub enum ClientMode {
     Recognize,
 }
 
-pub async fn process_files<F, Fut>(
+pub async fn process_files<T, F, Fut>(
     config: &Configuration,
-    tx: Sender<ProgressReporter>,
+    tx: Sender<ProgressReporter<T>>,
     api_action: F,
 ) -> anyhow::Result<()>
 where
     F: Fn(String, Vec<PathBuf>) -> Fut + Send + Sync,
     Fut: Future<Output = anyhow::Result<()>> + Send,
+    T: Clone + std::marker::Sync + std::marker::Send + 'static,
 {
     tx.send(ProgressReporter::Message(format!(
         "Start processing directory: {}",
