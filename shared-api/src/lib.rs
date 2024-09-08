@@ -71,20 +71,27 @@ pub struct RecognizeResult {
     /// The number of faces that did not have a match
     pub failure_count: usize,
 
-    /// The list of faces that were not recognized
-    pub unrecognized: Vec<PathBuf>,
+    /// The list of faces that were not recognized because of a match
+    pub failure_faces: Vec<PathBuf>,
+
+    /// The number of faces that was unable to be processed (for example, when api query fails)
+    pub missing_count: usize,
+
+    /// The list of faces that were not recognized because of an error
+    pub missed_faces: Vec<PathBuf>,
 }
 
 impl Display for RecognizeResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "%success: {}, Total: {}, Success: {}, Failure: {}, Unrecognized: {}",
+            "Total match %: {}, Without missing match %: {}, Total: {}, Success: {}, Failure: {}, missing: {}",
             self.get_success_percentage(),
+            self.get_success_percentage_without_missing(),
             self.total_count,
             self.success_count,
             self.failure_count,
-            self.unrecognized.len()
+            self.missing_count
         )
     }
 }
@@ -94,7 +101,9 @@ impl RecognizeResult {
             total_count,
             success_count: 0,
             failure_count: 0,
-            unrecognized: Vec::with_capacity(total_count),
+            failure_faces: Vec::new(),
+            missing_count: 0,
+            missed_faces: Vec::new(),
         }
     }
 
@@ -104,7 +113,9 @@ impl RecognizeResult {
         self.total_count += other.total_count;
         self.success_count += other.success_count;
         self.failure_count += other.failure_count;
-        self.unrecognized.extend(other.unrecognized);
+        self.failure_faces.extend(other.failure_faces);
+        self.missing_count += other.missing_count;
+        self.missed_faces.extend(other.missed_faces);
     }
 
     /// get percentage of the success recognition
@@ -114,6 +125,15 @@ impl RecognizeResult {
         }
         (self.success_count as f64 / self.total_count as f64) * 100.0
     }
+
+    /// get percentage of the success recognition only from the faces that was not missing
+    /// This is useful to get the percentage of the faces that was recognized correctly
+    pub fn get_success_percentage_without_missing(&self) -> f64 {
+        if self.total_count == 0 {
+            return 0.0;
+        }
+        (self.success_count as f64 / (self.total_count - self.missing_count) as f64) * 100.0
+    }
 }
 
 impl Clone for RecognizeResult {
@@ -122,7 +142,9 @@ impl Clone for RecognizeResult {
             total_count: self.total_count,
             success_count: self.success_count,
             failure_count: self.failure_count,
-            unrecognized: self.unrecognized.clone(),
+            failure_faces: self.failure_faces.clone(),
+            missing_count: self.missing_count,
+            missed_faces: self.missed_faces.clone(),
         }
     }
 }

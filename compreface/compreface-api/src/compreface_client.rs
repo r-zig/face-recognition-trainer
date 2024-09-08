@@ -152,24 +152,50 @@ impl Recognizer for CompreFaceClient {
                 .mime_str(mime.as_ref())?;
             let form = reqwest::multipart::Form::new().part("file", part);
 
-            let response = self
+            let response = match self
                 .client
                 .post(&url)
                 .header("x-api-key", &self.config.compreface_api_key)
                 .multipart(form)
                 .send()
-                .await?
-                .json::<RecognitionApiResponse>()
-                .await?;
-            if response
-                .result
-                .iter()
-                .any(|r| r.subjects.iter().any(|s| s.subject == name))
+                .await
             {
-                recognition_result.success_count += 1;
-            } else {
-                recognition_result.failure_count += 1;
-                recognition_result.unrecognized.push(file_path);
+                Ok(response) => response,
+                Err(e) => {
+                    error!(
+                        "Failed to recognize file: {} for name: {}: {}",
+                        file_path.display(),
+                        name,
+                        e
+                    );
+                    recognition_result.missing_count += 1;
+                    recognition_result.missed_faces.push(file_path);
+                    continue;
+                }
+            };
+            match response.json::<RecognitionApiResponse>().await {
+                Ok(response) => {
+                    if response
+                        .result
+                        .iter()
+                        .any(|r| r.subjects.iter().any(|s| s.subject == name))
+                    {
+                        recognition_result.success_count += 1;
+                    } else {
+                        recognition_result.failure_count += 1;
+                        recognition_result.failure_faces.push(file_path);
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        "Failed to parse JSON response for file: {} for name: {} Error: {}",
+                        file_path.display(),
+                        name,
+                        e
+                    );
+                    recognition_result.missing_count += 1;
+                    recognition_result.missed_faces.push(file_path);
+                }
             }
         }
         Ok(recognition_result)
@@ -183,21 +209,21 @@ struct RecognitionApiResponse {
 
 #[derive(Deserialize, Debug)]
 struct ResultItem {
-    r#_box: DetectionBox,
+    r#box: DetectionBox,
     subjects: Vec<Subject>,
 }
 
 #[derive(Deserialize, Debug)]
 struct DetectionBox {
-    _probability: f64,
-    _x_max: u32,
-    _y_max: u32,
-    _x_min: u32,
-    _y_min: u32,
+    probability: f64,
+    x_max: u32,
+    y_max: u32,
+    x_min: u32,
+    y_min: u32,
 }
 
 #[derive(Deserialize, Debug)]
 struct Subject {
     subject: String,
-    _similarity: f64,
+    similarity: f64,
 }
