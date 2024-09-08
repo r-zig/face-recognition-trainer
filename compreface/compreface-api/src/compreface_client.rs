@@ -209,11 +209,13 @@ struct RecognitionApiResponse {
 
 #[derive(Deserialize, Debug)]
 struct ResultItem {
+    #[allow(unused)]
     r#box: DetectionBox,
     subjects: Vec<Subject>,
 }
 
 #[derive(Deserialize, Debug)]
+#[allow(unused)]
 struct DetectionBox {
     probability: f64,
     x_max: u32,
@@ -225,5 +227,6 @@ struct DetectionBox {
 #[derive(Deserialize, Debug)]
 struct Subject {
     subject: String,
+    #[allow(unused)]
     similarity: f64,
 }
