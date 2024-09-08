@@ -6,4 +6,4 @@ members = [
     "compreface/compreface-contracts",
     "double-take/double-take-contracts",
     "shared-api"
-, "shared-lib"]
+]
