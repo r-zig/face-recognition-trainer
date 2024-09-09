@@ -30,6 +30,8 @@
                 "http://localhost:8080",
                 "--compreface-api-key",
                 "2b6a8351-059a-4ac9-b897-24bc726459e5",
+                "--output-dir",
+                "./output"
             ],
             "cwd": "${workspaceFolder}",
             "stopOnEntry": false,

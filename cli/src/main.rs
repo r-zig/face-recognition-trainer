@@ -1,9 +1,11 @@
+use std::path::Path;
+
 use compreface_api::{recognize, train};
 use dotenv::dotenv;
 use indicatif::{MultiProgress, ProgressBar};
 use shared_api::{ClientMode, Configuration, ProgressReporter, RecognizeResult, TrainResult};
 use tokio::task::{self, JoinHandle};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
@@ -50,7 +52,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 train(&config, tx_train_progress).await?;
             }
             ClientMode::Recognize => {
-                recognize(&config, tx_recognize_progress).await?;
+                let result = recognize(&config, tx_recognize_progress).await?;
+                // write the missing and failures files to the file
+                write_failures(&config, result).await.map_err(|e| {
+                    warn!("Failed to write the missing and failures files, but the process finished. error: {}", e);
+                    e
+                })?;
             }
         };
         Ok::<_, anyhow::Error>(())
@@ -94,6 +101,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+async fn write_failures(
+    config: &Configuration,
+    result: RecognizeResult,
+) -> Result<(), anyhow::Error> {
+    if let Some(output_dir) = &config.output_dir {
+        let output_dir: &Path = Path::new(output_dir);
+        if result.failure_count > 0 {
+            let sub_folder = output_dir.join("failure_faces");
+            write_all_faces(sub_folder, result.failure_faces).await?;
+        }
+        if result.missed_count > 0 {
+            let sub_folder = output_dir.join("missed_faces");
+            write_all_faces(sub_folder, result.missed_faces).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn write_all_faces(
+    sub_folder: std::path::PathBuf,
+    files: Vec<std::path::PathBuf>,
+) -> Result<(), anyhow::Error> {
+    tokio::fs::create_dir_all(&sub_folder).await?;
+    for path in files {
+        let person_folder = sub_folder.join(path.parent().unwrap().file_stem().unwrap());
+        tokio::fs::create_dir_all(&person_folder).await?;
+        let file_name = path.file_name().unwrap().to_str().unwrap();
+        let new_path = person_folder.join(file_name);
+        tokio::fs::copy(&path, &new_path).await?;
+    }
+    Ok(())
+}
+
 async fn flatten<T>(handle: JoinHandle<Result<T, anyhow::Error>>) -> Result<T, anyhow::Error> {
     match handle.await {
         Ok(Ok(result)) => Ok(result),
@@ -110,9 +150,13 @@ fn update_progress<T>(
     T: core::fmt::Display + Clone + std::marker::Sync + std::marker::Send + 'static,
 {
     match progress_report {
-        ProgressReporter::Increase(len) => total_progress_bar.inc(len),
+        ProgressReporter::Increase(len) => {
+            total_progress_bar.inc(len);
+        }
         ProgressReporter::IncreaseLength(len) => total_progress_bar.inc_length(len),
-        ProgressReporter::Message(message) => total_progress_bar.set_message(message),
+        ProgressReporter::Message(message) => {
+            total_progress_bar.set_message(message);
+        }
         ProgressReporter::FinishWithMessage(message) => {
             total_progress_bar.finish_with_message(message)
         }

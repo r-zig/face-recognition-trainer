@@ -75,35 +75,39 @@ pub struct RecognizeResult {
     pub failure_faces: Vec<PathBuf>,
 
     /// The number of faces that was unable to be processed (for example, when api query fails)
-    pub missing_count: usize,
+    pub missed_count: usize,
 
     /// The list of faces that were not recognized because of an error
     pub missed_faces: Vec<PathBuf>,
+
+    pub context: String,
 }
 
 impl Display for RecognizeResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Total match %: {}, Without missing match %: {}, Total: {}, Success: {}, Failure: {}, missing: {}",
+            "{} Total match: {}%, Without missing match: {}%, Total: {}, Success: {}, Failure: {}, missing: {}",
+            self.context,
             self.get_success_percentage(),
             self.get_success_percentage_without_missing(),
             self.total_count,
             self.success_count,
             self.failure_count,
-            self.missing_count
+            self.missed_count
         )
     }
 }
 impl RecognizeResult {
-    pub fn with_capacity(total_count: usize) -> Self {
+    pub fn with_context(context: String) -> Self {
         RecognizeResult {
-            total_count,
+            total_count: 0,
             success_count: 0,
             failure_count: 0,
             failure_faces: Vec::new(),
-            missing_count: 0,
+            missed_count: 0,
             missed_faces: Vec::new(),
+            context,
         }
     }
 
@@ -114,7 +118,7 @@ impl RecognizeResult {
         self.success_count += other.success_count;
         self.failure_count += other.failure_count;
         self.failure_faces.extend(other.failure_faces);
-        self.missing_count += other.missing_count;
+        self.missed_count += other.missed_count;
         self.missed_faces.extend(other.missed_faces);
     }
 
@@ -132,7 +136,7 @@ impl RecognizeResult {
         if self.total_count == 0 {
             return 0.0;
         }
-        (self.success_count as f64 / (self.total_count - self.missing_count) as f64) * 100.0
+        (self.success_count as f64 / (self.total_count - self.missed_count) as f64) * 100.0
     }
 }
 
@@ -143,8 +147,9 @@ impl Clone for RecognizeResult {
             success_count: self.success_count,
             failure_count: self.failure_count,
             failure_faces: self.failure_faces.clone(),
-            missing_count: self.missing_count,
+            missed_count: self.missed_count,
             missed_faces: self.missed_faces.clone(),
+            context: self.context.clone(),
         }
     }
 }
@@ -198,6 +203,11 @@ pub struct Configuration {
     /// When set, it will ignore the folder name per image and use this name for all faces
     #[clap(long, env = "OVERRIDE_TRAINED_NAME")]
     pub override_trained_name: Option<String>,
+
+    /// Optional path to save the output of the failure and missing recognition
+    /// When set, it will save the output to this path
+    #[clap(long, env = "OUTPUT_DIR", default_value = None)]
+    pub output_dir: Option<String>,
 }
 
 impl Configuration {

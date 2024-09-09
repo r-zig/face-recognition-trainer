@@ -131,10 +131,20 @@ impl Recognizer for CompreFaceClient {
         );
 
         debug!("recognizing directory {} with {} files", name, files.len());
-        let mut recognition_result = RecognizeResult::with_capacity(files.len());
+        let mut recognition_result = RecognizeResult::with_context(
+            files
+                .first()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string(),
+        );
 
         for file_path in files {
             debug!("sending file: {:?}", file_path);
+            recognition_result.total_count += 1;
 
             let mime = MimeGuess::from_path(file_path.as_path()).first_or_octet_stream();
             let mut file = fs::File::open(file_path.as_path()).await?;
@@ -168,7 +178,7 @@ impl Recognizer for CompreFaceClient {
                         name,
                         e
                     );
-                    recognition_result.missing_count += 1;
+                    recognition_result.missed_count += 1;
                     recognition_result.missed_faces.push(file_path);
                     continue;
                 }
@@ -193,7 +203,7 @@ impl Recognizer for CompreFaceClient {
                         name,
                         e
                     );
-                    recognition_result.missing_count += 1;
+                    recognition_result.missed_count += 1;
                     recognition_result.missed_faces.push(file_path);
                 }
             }
