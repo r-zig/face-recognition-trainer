@@ -12,10 +12,10 @@ pub async fn train(
 ) -> anyhow::Result<()> {
     let api_client = Arc::new(CompreFaceClient::new(config.compreface.clone().unwrap()));
 
-    process_files(config, tx, move |name: String, files| {
+    process_files(config, tx, move |name: String, files, tx| {
         let api_client = Arc::clone(&api_client);
         async move {
-            api_client.send_to_train(&name, files).await?;
+            api_client.send_to_train(&name, files, tx).await?;
             Ok(())
         }
     })
@@ -36,22 +36,21 @@ pub async fn recognize(
     process_files(
         config,
         process_progress_reporter_tx,
-        move |name: String, files| {
+        move |name: String, files, process_progress_reporter_tx| {
             let api_client = Arc::clone(&api_client);
             let cloned_result = state.clone();
             let cloned_tx = api_progress_reporter_tx.clone();
             async move {
-                let partial_result = api_client.recognize(&name, files).await?;
-                cloned_tx
-                    .send(ProgressReporter::StructedMessage(partial_result.clone()))
+                let partial_result = api_client
+                    .recognize(&name, files, process_progress_reporter_tx)
                     .await?;
                 // accumulate the result
                 let mut guard = cloned_result.lock().await;
                 guard.add(partial_result);
-                // let report: RecognizeResult = guard.clone();
-                // cloned_tx
-                //     .send(ProgressReporter::StructedMessage(report))
-                //     .await?;
+                let report: RecognizeResult = guard.clone();
+                cloned_tx
+                    .send(ProgressReporter::StructedMessage(report))
+                    .await?;
 
                 Ok(())
             }

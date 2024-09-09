@@ -6,8 +6,8 @@ use compreface_contracts::CompreFaceConfig;
 use mime_guess::MimeGuess;
 use reqwest::{multipart::Part, Client};
 use serde::Deserialize;
-use shared_api::{RecognizeResult, Recognizer, TrainResult, Trainer};
-use tokio::{fs, io::AsyncReadExt};
+use shared_api::{ProgressReporter, RecognizeResult, Recognizer, TrainResult, Trainer};
+use tokio::{fs, io::AsyncReadExt, sync::mpsc::Sender};
 use tracing::{debug, error, warn};
 
 /// Comperface client supports handling communication with the Comperface API.
@@ -25,7 +25,12 @@ impl CompreFaceClient {
 
 #[async_trait]
 impl Trainer for CompreFaceClient {
-    async fn send_to_train(&self, name: &str, files: Vec<PathBuf>) -> anyhow::Result<TrainResult> {
+    async fn send_to_train(
+        &self,
+        name: &str,
+        files: Vec<PathBuf>,
+        progress_reporter_tx: Sender<ProgressReporter<TrainResult>>,
+    ) -> anyhow::Result<TrainResult> {
         // this is postman example: {{compreface_base_url}}/api/v1/recognition/faces?subject={{subject_name}}
         let url = format!(
             "{}/api/v1/recognition/faces?subject={}",
@@ -59,7 +64,9 @@ impl Trainer for CompreFaceClient {
                 .multipart(form)
                 .send()
                 .await?;
-
+            progress_reporter_tx
+                .send(ProgressReporter::Increase(1))
+                .await?;
             match response.status().as_u16() {
                 200 => {
                     debug!(
@@ -123,7 +130,12 @@ impl Trainer for CompreFaceClient {
 
 #[async_trait]
 impl Recognizer for CompreFaceClient {
-    async fn recognize(&self, name: &str, files: Vec<PathBuf>) -> anyhow::Result<RecognizeResult> {
+    async fn recognize(
+        &self,
+        name: &str,
+        files: Vec<PathBuf>,
+        progress_reporter_tx: Sender<ProgressReporter<RecognizeResult>>,
+    ) -> anyhow::Result<RecognizeResult> {
         // this is postman example: {{compreface_base_url}}/api/v1/recognition/recognize
         let url = format!(
             "{}/api/v1/recognition/recognize",
@@ -180,6 +192,9 @@ impl Recognizer for CompreFaceClient {
                     );
                     recognition_result.missed_count += 1;
                     recognition_result.missed_faces.push(file_path);
+                    progress_reporter_tx
+                        .send(ProgressReporter::Increase(1))
+                        .await?;
                     continue;
                 }
             };
@@ -207,6 +222,9 @@ impl Recognizer for CompreFaceClient {
                     recognition_result.missed_faces.push(file_path);
                 }
             }
+            progress_reporter_tx
+                .send(ProgressReporter::Increase(1))
+                .await?;
         }
         Ok(recognition_result)
     }

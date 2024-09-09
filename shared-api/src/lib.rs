@@ -17,7 +17,12 @@ pub mod utils;
 /// The function send instructions to the destination to train the model, but the train itself is async
 #[async_trait]
 pub trait Trainer {
-    async fn send_to_train(&self, name: &str, files: Vec<PathBuf>) -> anyhow::Result<TrainResult>;
+    async fn send_to_train(
+        &self,
+        name: &str,
+        files: Vec<PathBuf>,
+        progress_reporter_tx: Sender<ProgressReporter<TrainResult>>,
+    ) -> anyhow::Result<TrainResult>;
 }
 
 #[async_trait]
@@ -44,6 +49,11 @@ where
     }
 }
 
+/// represent the progress of the process
+pub trait ProcessProgress {
+    fn get_total_count(&self) -> usize;
+    fn get_success_count(&self) -> usize;
+}
 #[derive(Clone, Debug)]
 pub struct TrainResult {}
 
@@ -52,11 +62,26 @@ impl Display for TrainResult {
         write!(f, "Training completed")
     }
 }
+
+impl ProcessProgress for TrainResult {
+    fn get_total_count(&self) -> usize {
+        0
+    }
+
+    fn get_success_count(&self) -> usize {
+        0
+    }
+}
 /// Recognize trait
 /// This trait is used to recognize faces in a set of images and a given name
 #[async_trait]
 pub trait Recognizer {
-    async fn recognize(&self, name: &str, files: Vec<PathBuf>) -> anyhow::Result<RecognizeResult>;
+    async fn recognize(
+        &self,
+        name: &str,
+        files: Vec<PathBuf>,
+        progress_reporter_tx: Sender<ProgressReporter<RecognizeResult>>,
+    ) -> anyhow::Result<RecognizeResult>;
 }
 
 /// RecognizeResult struct to hold the result of the recognition
@@ -87,10 +112,8 @@ impl Display for RecognizeResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{} Total match: {}%, Without missing match: {}%, Total: {}, Success: {}, Failure: {}, missing: {}",
+            "{} Total: {}, Success: {}, Failure: {}, missing: {}",
             self.context,
-            self.get_success_percentage(),
-            self.get_success_percentage_without_missing(),
             self.total_count,
             self.success_count,
             self.failure_count,
@@ -121,25 +144,17 @@ impl RecognizeResult {
         self.missed_count += other.missed_count;
         self.missed_faces.extend(other.missed_faces);
     }
-
-    /// get percentage of the success recognition
-    pub fn get_success_percentage(&self) -> f64 {
-        if self.total_count == 0 {
-            return 0.0;
-        }
-        (self.success_count as f64 / self.total_count as f64) * 100.0
-    }
-
-    /// get percentage of the success recognition only from the faces that was not missing
-    /// This is useful to get the percentage of the faces that was recognized correctly
-    pub fn get_success_percentage_without_missing(&self) -> f64 {
-        if self.total_count == 0 {
-            return 0.0;
-        }
-        (self.success_count as f64 / (self.total_count - self.missed_count) as f64) * 100.0
-    }
 }
 
+impl ProcessProgress for RecognizeResult {
+    fn get_total_count(&self) -> usize {
+        self.total_count
+    }
+
+    fn get_success_count(&self) -> usize {
+        self.success_count
+    }
+}
 impl Clone for RecognizeResult {
     fn clone(&self) -> Self {
         RecognizeResult {
@@ -156,7 +171,7 @@ impl Clone for RecognizeResult {
 /// ProgressReporter enum to report the progress of the training or recognition operation
 pub enum ProgressReporter<T>
 where
-    T: Clone + std::marker::Sync + std::marker::Send + 'static,
+    T: ProcessProgress + Clone + std::marker::Sync + std::marker::Send + 'static,
 {
     /// Increase the progress fill by the given value
     Increase(u64),
@@ -250,9 +265,9 @@ pub async fn process_files<T, F, Fut>(
     api_action: F,
 ) -> anyhow::Result<()>
 where
-    F: Fn(String, Vec<PathBuf>) -> Fut + Send + Sync,
+    F: Fn(String, Vec<PathBuf>, Sender<ProgressReporter<T>>) -> Fut + Send + Sync,
     Fut: Future<Output = anyhow::Result<()>> + Send,
-    T: Clone + std::marker::Sync + std::marker::Send + 'static,
+    T: Clone + ProcessProgress + std::marker::Sync + std::marker::Send + 'static,
 {
     tx.send(ProgressReporter::Message(format!(
         "Start processing directory: {}",
@@ -297,9 +312,7 @@ where
 
             let file_len = fs::metadata(path_buf.clone()).await?.len();
             if total_size + file_len > config.max_request_size {
-                let current_items = files_content.len() as u64;
-                api_action(name.clone(), files_content.clone()).await?;
-                tx.send(ProgressReporter::Increase(current_items)).await?;
+                api_action(name.clone(), files_content.clone(), tx.clone()).await?;
                 files_content.clear();
                 total_size = 0;
             }
@@ -309,9 +322,7 @@ where
         }
 
         if !files_content.is_empty() {
-            let current_items = files_content.len() as u64;
-            api_action(name, files_content).await?;
-            tx.send(ProgressReporter::Increase(current_items)).await?;
+            api_action(name, files_content, tx.clone()).await?;
         }
     }
 

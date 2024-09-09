@@ -2,8 +2,10 @@ use std::path::Path;
 
 use compreface_api::{recognize, train};
 use dotenv::dotenv;
-use indicatif::{MultiProgress, ProgressBar};
-use shared_api::{ClientMode, Configuration, ProgressReporter, RecognizeResult, TrainResult};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use shared_api::{
+    ClientMode, Configuration, ProcessProgress, ProgressReporter, RecognizeResult, TrainResult,
+};
 use tokio::task::{self, JoinHandle};
 use tracing::{debug, error, info, warn};
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
@@ -38,6 +40,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         total_progress_bar.set_style(style);
     }
+
+    accumulated_progress_bar.set_style(
+        ProgressStyle::default_bar()
+            .template("Success rate: [{bar:40.cyan/blue}] {percent}% {pos}/{len} succeeded")
+            .unwrap(),
+    );
+
     total_progress_bar.set_message("starting");
 
     // create rx,tx pair that will be used to send the progress report from the internal logic to the progress bar
@@ -49,10 +58,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let long_task = task::spawn(async move {
         match config.client_mode {
             ClientMode::Train => {
-                train(&config, tx_train_progress).await?;
+                train(&config, tx_train_progress.clone()).await?;
             }
             ClientMode::Recognize => {
-                let result = recognize(&config, tx_recognize_progress).await?;
+                let result = recognize(&config, tx_recognize_progress.clone()).await?;
+                tx_recognize_progress
+                    .send(ProgressReporter::StructedMessage(result.clone()))
+                    .await?;
+                tx_recognize_progress
+                    .send(ProgressReporter::FinishWithMessage(format!(
+                        "Finish: {}",
+                        result
+                    )))
+                    .await?;
                 // write the missing and failures files to the file
                 write_failures(&config, result).await.map_err(|e| {
                     warn!("Failed to write the missing and failures files, but the process finished. error: {}", e);
@@ -147,7 +165,12 @@ fn update_progress<T>(
     total_progress_bar: &ProgressBar,
     accumulated_progress_bar: &ProgressBar,
 ) where
-    T: core::fmt::Display + Clone + std::marker::Sync + std::marker::Send + 'static,
+    T: core::fmt::Display
+        + ProcessProgress
+        + Clone
+        + std::marker::Sync
+        + std::marker::Send
+        + 'static,
 {
     match progress_report {
         ProgressReporter::Increase(len) => {
@@ -161,9 +184,8 @@ fn update_progress<T>(
             total_progress_bar.finish_with_message(message)
         }
         ProgressReporter::StructedMessage(message) => {
-            total_progress_bar.set_message(message.to_string());
-            accumulated_progress_bar.set_message(message.to_string());
-            println!("** {}", message);
+            accumulated_progress_bar.set_length(message.get_total_count() as u64);
+            accumulated_progress_bar.set_position(message.get_success_count() as u64);
         }
     }
 }
