@@ -11,8 +11,3 @@ pub struct DoubleTakeConfig {
     )]
     pub doubletake_url: String,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-}
