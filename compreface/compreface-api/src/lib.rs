@@ -58,8 +58,5 @@ pub async fn recognize(
     )
     .await?;
     let state_result = state_result.lock().await.clone();
-    progress_reporter_tx
-        .send(ProgressReporter::StructedMessage(state_result.clone()))
-        .await?;
     Ok(state_result)
 }
