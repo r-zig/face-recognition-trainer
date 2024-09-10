@@ -186,6 +186,7 @@ fn update_progress<T>(
         ProgressReporter::StructedMessage(message) => {
             accumulated_progress_bar.set_length(message.get_total_count() as u64);
             accumulated_progress_bar.set_position(message.get_success_count() as u64);
+            accumulated_progress_bar.abandon();
         }
     }
 }
