@@ -284,7 +284,12 @@ where
             None => utils::get_directory_name(&group)?,
         };
 
-        tx.send(ProgressReporter::IncreaseLength(group.len() as u64))
+        // increase the progress length by the number of files in the group, ignoring directories or errors
+        let files_count = group
+            .iter()
+            .filter(|path| path.is_ok() && path.as_ref().unwrap().is_file())
+            .count();
+        tx.send(ProgressReporter::IncreaseLength(files_count as u64))
             .await?;
         tx.send(ProgressReporter::Message(format!(
             "processing directory: {}",
