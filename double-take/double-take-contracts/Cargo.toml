@@ -2,6 +2,7 @@
 name = "double-take-contracts"
 version = "0.1.0"
 edition = "2021"
+authors = ["Ron Zigelman <roniz.net@gmail.com>"]
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive", "env"] }
