@@ -114,13 +114,13 @@ impl Trainer for CompreFaceClient {
                     continue;
                 }
                 _ => {
-                    bail!(format!(
+                    bail!(
                         "Failed to train file: {}, for name: {}, response.status: {}, response text: {}",
                         file_path.display(),
                         name,
                         &response.status(),
                         &response.text().await?
-                    ));
+                    );
                 }
             }
         }
