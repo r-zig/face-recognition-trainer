@@ -1,14 +1,13 @@
 use std::path::PathBuf;
 
-use anyhow::bail;
 use async_trait::async_trait;
 use compreface_contracts::CompreFaceConfig;
 use mime_guess::MimeGuess;
 use reqwest::{multipart::Part, Client};
 use serde::Deserialize;
-use shared_api::{ProgressReporter, RecognizeResult, Recognizer, TrainResult, Trainer};
+use shared_api::{FaceProcessingResult, ProgressReporter, Recognizer, Trainer};
 use tokio::{fs, io::AsyncReadExt, sync::mpsc::Sender};
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 /// Comperface client supports handling communication with the Comperface API.
 pub struct CompreFaceClient {
@@ -29,14 +28,26 @@ impl Trainer for CompreFaceClient {
         &self,
         name: &str,
         files: Vec<PathBuf>,
-        progress_reporter_tx: Sender<ProgressReporter<TrainResult>>,
-    ) -> anyhow::Result<TrainResult> {
+        progress_reporter_tx: Sender<ProgressReporter<FaceProcessingResult>>,
+    ) -> anyhow::Result<FaceProcessingResult> {
         // this is postman example: {{compreface_base_url}}/api/v1/recognition/faces?subject={{subject_name}}
         let url = format!(
             "{}/api/v1/recognition/faces?subject={}",
             self.config.compreface_url, name
         );
 
+        let mut recognition_result = FaceProcessingResult::with_context(
+            files
+                .first()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string(),
+        );
+
+        recognition_result.total_count = files.len();
         debug!("training directory {} with {} files", name, files.len());
         for file_path in files {
             debug!("sending file: {:?}", file_path);
@@ -63,12 +74,25 @@ impl Trainer for CompreFaceClient {
                 .header("x-api-key", &self.config.compreface_api_key)
                 .multipart(form)
                 .send()
-                .await?;
+                .await;
+            if let Err(e) = response {
+                error!(
+                    "Failed to train file: {} for name: {}: {}",
+                    file_path.display(),
+                    name,
+                    e
+                );
+                recognition_result.missed_count += 1;
+                recognition_result.missed_faces.push(file_path);
+                continue;
+            }
+            let response = response.unwrap();
             progress_reporter_tx
                 .send(ProgressReporter::Increase(1))
                 .await?;
             match response.status().as_u16() {
-                200 => {
+                200 | 201 => {
+                    recognition_result.success_count += 1;
                     debug!(
                         "Training: {} for file: {} response: {}",
                         name,
@@ -76,55 +100,20 @@ impl Trainer for CompreFaceClient {
                         &response.text().await?
                     );
                 }
-                201 => {
-                    debug!(
-                        "Training: {} for file: {} response: {}",
-                        name,
-                        file_path.display(),
-                        &response.text().await?
-                    );
-                }
-                400 => {
+                _ => {
                     error!("Failed to train file: {}, for name: {}, response.status: {}, response text: {}, but will continue with the other files",
                         file_path.display(),
                         name,
                         &response.status(),
                         &response.text().await?
                     );
-                    // move the file to the error directory
-                    let original_extension = file_path.extension().unwrap().to_str().unwrap();
-                    let renamed_path = file_path.as_path().parent().unwrap().join(
-                        file_path
-                            .as_path()
-                            .file_stem()
-                            .unwrap()
-                            .to_str()
-                            .unwrap()
-                            .to_owned()
-                            + ".error."
-                            + original_extension,
-                    );
-
-                    warn!(
-                        "Renaming file: {} to: {}",
-                        file_path.display(),
-                        renamed_path.display()
-                    );
-                    fs::rename(file_path.as_path(), renamed_path).await?;
+                    recognition_result.failure_count += 1;
+                    recognition_result.failure_faces.push(file_path);
                     continue;
-                }
-                _ => {
-                    bail!(
-                        "Failed to train file: {}, for name: {}, response.status: {}, response text: {}",
-                        file_path.display(),
-                        name,
-                        &response.status(),
-                        &response.text().await?
-                    );
                 }
             }
         }
-        Ok(TrainResult {})
+        Ok(recognition_result)
     }
 }
 
@@ -134,8 +123,8 @@ impl Recognizer for CompreFaceClient {
         &self,
         name: &str,
         files: Vec<PathBuf>,
-        progress_reporter_tx: Sender<ProgressReporter<RecognizeResult>>,
-    ) -> anyhow::Result<RecognizeResult> {
+        progress_reporter_tx: Sender<ProgressReporter<FaceProcessingResult>>,
+    ) -> anyhow::Result<FaceProcessingResult> {
         // this is postman example: {{compreface_base_url}}/api/v1/recognition/recognize
         let url = format!(
             "{}/api/v1/recognition/recognize",
@@ -143,7 +132,7 @@ impl Recognizer for CompreFaceClient {
         );
 
         debug!("recognizing directory {} with {} files", name, files.len());
-        let mut recognition_result = RecognizeResult::with_context(
+        let mut recognition_result = FaceProcessingResult::with_context(
             files
                 .first()
                 .unwrap()
