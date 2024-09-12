@@ -21,8 +21,8 @@ pub trait Trainer {
         &self,
         name: &str,
         files: Vec<PathBuf>,
-        progress_reporter_tx: Sender<ProgressReporter<TrainResult>>,
-    ) -> anyhow::Result<TrainResult>;
+        progress_reporter_tx: Sender<ProgressReporter<FaceProcessingResult>>,
+    ) -> anyhow::Result<FaceProcessingResult>;
 }
 
 #[async_trait]
@@ -30,21 +30,21 @@ pub trait TrainLogic {
     async fn train(
         &self,
         config: &Configuration,
-        tx: Sender<ProgressReporter<TrainResult>>,
-    ) -> anyhow::Result<TrainResult>;
+        tx: Sender<ProgressReporter<FaceProcessingResult>>,
+    ) -> anyhow::Result<FaceProcessingResult>;
 }
 
 #[async_trait]
 impl<F, Fut> TrainLogic for F
 where
-    F: Fn(&Configuration, Sender<ProgressReporter<TrainResult>>) -> Fut + Send + Sync,
-    Fut: Future<Output = anyhow::Result<TrainResult>> + Send,
+    F: Fn(&Configuration, Sender<ProgressReporter<FaceProcessingResult>>) -> Fut + Send + Sync,
+    Fut: Future<Output = anyhow::Result<FaceProcessingResult>> + Send,
 {
     async fn train(
         &self,
         config: &Configuration,
-        tx: Sender<ProgressReporter<TrainResult>>,
-    ) -> anyhow::Result<TrainResult> {
+        tx: Sender<ProgressReporter<FaceProcessingResult>>,
+    ) -> anyhow::Result<FaceProcessingResult> {
         (self)(config, tx).await
     }
 }
@@ -54,24 +54,7 @@ pub trait ProcessProgress {
     fn get_total_count(&self) -> usize;
     fn get_success_count(&self) -> usize;
 }
-#[derive(Clone, Debug)]
-pub struct TrainResult {}
 
-impl Display for TrainResult {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Training completed")
-    }
-}
-
-impl ProcessProgress for TrainResult {
-    fn get_total_count(&self) -> usize {
-        0
-    }
-
-    fn get_success_count(&self) -> usize {
-        0
-    }
-}
 /// Recognize trait
 /// This trait is used to recognize faces in a set of images and a given name
 #[async_trait]
@@ -80,13 +63,13 @@ pub trait Recognizer {
         &self,
         name: &str,
         files: Vec<PathBuf>,
-        progress_reporter_tx: Sender<ProgressReporter<RecognizeResult>>,
-    ) -> anyhow::Result<RecognizeResult>;
+        progress_reporter_tx: Sender<ProgressReporter<FaceProcessingResult>>,
+    ) -> anyhow::Result<FaceProcessingResult>;
 }
 
 /// RecognizeResult struct to hold the result of the recognition
 #[derive(Debug)]
-pub struct RecognizeResult {
+pub struct FaceProcessingResult {
     /// The total number of faces that were queried
     pub total_count: usize,
 
@@ -108,7 +91,7 @@ pub struct RecognizeResult {
     pub context: String,
 }
 
-impl Display for RecognizeResult {
+impl Display for FaceProcessingResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -121,9 +104,9 @@ impl Display for RecognizeResult {
         )
     }
 }
-impl RecognizeResult {
+impl FaceProcessingResult {
     pub fn with_context(context: String) -> Self {
-        RecognizeResult {
+        FaceProcessingResult {
             total_count: 0,
             success_count: 0,
             failure_count: 0,
@@ -136,7 +119,7 @@ impl RecognizeResult {
 
     /// add other RecognizeResult to this one
     /// This is used to merge the results of multiple RecognizeResult
-    pub fn add(&mut self, other: RecognizeResult) {
+    pub fn add(&mut self, other: FaceProcessingResult) {
         self.total_count += other.total_count;
         self.success_count += other.success_count;
         self.failure_count += other.failure_count;
@@ -146,7 +129,7 @@ impl RecognizeResult {
     }
 }
 
-impl ProcessProgress for RecognizeResult {
+impl ProcessProgress for FaceProcessingResult {
     fn get_total_count(&self) -> usize {
         self.total_count
     }
@@ -155,9 +138,9 @@ impl ProcessProgress for RecognizeResult {
         self.success_count
     }
 }
-impl Clone for RecognizeResult {
+impl Clone for FaceProcessingResult {
     fn clone(&self) -> Self {
-        RecognizeResult {
+        FaceProcessingResult {
             total_count: self.total_count,
             success_count: self.success_count,
             failure_count: self.failure_count,
