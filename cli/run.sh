@@ -8,16 +8,17 @@ echo "base_script_dir: ${base_script_dir}"
 cd $base_script_dir
 
 # Set default values only if not already set in the environment
-# export DATASET_PATH=${DATASET_PATH:-/home/ron/Documents/smart-home/faces-train}
-# export DATASET_PATH=${DATASET_PATH:-/home/ron/Documents/smart-home/faces-train/errors}
 # export DATASET_PATH=${DATASET_PATH:-/home/ron/Documents/smart-home/faces-train/lfw_funneled}
-export DATASET_PATH=${DATASET_PATH:-/home/ron/Documents/smart-home/faces-train/known/}
-export OUTPUT_DIR=${OUTPUT_DIR:-./output}
+export DATASET_PATH=${DATASET_PATH:-/home/ron/Documents/smart-home/faces-train/un-trained}
+export OUTPUT_DIR=${OUTPUT_DIR:-./output-errors/}
 export DOUBLE_TAKE_URL=${DOUBLE_TAKE_URL:-http://localhost:3000}
-# export DOUBLE_TAKE_URL=${DOUBLE_TAKE_URL:-https://123c4afc1035a38b3690c92f7c387403.m.pipedream.net}
-export COMPREFACE_URL=${COMPREFACE_URL:-http://10.100.102.5:32259}
-# export COMPREFACE_API_KEY=${COMPREFACE_API_KEY:-"00000000-0000-0000-0000-000000000002"}
-export COMPREFACE_API_KEY=${COMPREFACE_API_KEY:-"2b6a8351-059a-4ac9-b897-24bc726459e5"}
+export COMPREFACE_URL=${COMPREFACE_URL:-http://10.100.102.5:31844}
+# recognition-with-unknown-famous-faces
+export COMPREFACE_API_KEY=${COMPREFACE_API_KEY:-"a096fdec-2d71-430c-a50d-c99cf6fe5d49"}
+
+# recognition-with-known-famous-faces
+# export COMPREFACE_API_KEY=${COMPREFACE_API_KEY:-"1dfab7a8-0007-4831-adc2-2a1aedb2e3e5"}
+
 
 # override the trained name per folder
 # export OVERRIDE_TRAINED_NAME=${OVERRIDE_TRAINED_NAME:-"uknown"}
