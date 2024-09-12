@@ -4,7 +4,7 @@ use compreface_api::{recognize, train};
 use dotenv::dotenv;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use shared_api::{
-    ClientMode, Configuration, ProcessProgress, ProgressReporter, RecognizeResult, TrainResult,
+    ClientMode, Configuration, FaceProcessingResult, ProcessProgress, ProgressReporter,
 };
 use tokio::task::{self, JoinHandle};
 use tracing::{debug, error, info, warn};
@@ -56,28 +56,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_mode = config.client_mode.clone();
     // spawn the async task that will run the logic, let the ui get the updates while the long process is running
     let long_task = task::spawn(async move {
-        match config.client_mode {
-            ClientMode::Train => {
-                train(&config, tx_train_progress.clone()).await?;
-            }
-            ClientMode::Recognize => {
-                let result = recognize(&config, tx_recognize_progress.clone()).await?;
-                tx_recognize_progress
-                    .send(ProgressReporter::StructedMessage(result.clone()))
-                    .await?;
-                tx_recognize_progress
-                    .send(ProgressReporter::FinishWithMessage(format!(
-                        "Finish: {}",
-                        result
-                    )))
-                    .await?;
-                // write the missing and failures files to the file
-                write_failures(&config, result).await.map_err(|e| {
+        let result = match config.client_mode {
+            ClientMode::Train => train(&config, tx_train_progress.clone()).await?,
+            ClientMode::Recognize => recognize(&config, tx_recognize_progress.clone()).await?,
+        };
+        tx_recognize_progress
+            .send(ProgressReporter::StructedMessage(result.clone()))
+            .await?;
+        tx_recognize_progress
+            .send(ProgressReporter::FinishWithMessage(format!(
+                "Finish: {}",
+                result
+            )))
+            .await?;
+        // write the missing and failures files to the file
+        write_failures(&config, result).await.map_err(|e| {
                     warn!("Failed to write the missing and failures files, but the process finished. error: {}", e);
                     e
                 })?;
-            }
-        };
         Ok::<_, anyhow::Error>(())
     });
 
@@ -86,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match client_mode {
             ClientMode::Train => {
                 while let Some(progress_report) = rx_train_progress.recv().await {
-                    update_progress::<TrainResult>(
+                    update_progress::<FaceProcessingResult>(
                         progress_report,
                         &total_progress_bar,
                         &accumulated_progress_bar,
@@ -95,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             ClientMode::Recognize => {
                 while let Some(progress_report) = rx_recognize_progress.recv().await {
-                    update_progress::<RecognizeResult>(
+                    update_progress::<FaceProcessingResult>(
                         progress_report,
                         &total_progress_bar,
                         &accumulated_progress_bar,
@@ -121,7 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn write_failures(
     config: &Configuration,
-    result: RecognizeResult,
+    result: FaceProcessingResult,
 ) -> Result<(), anyhow::Error> {
     if let Some(output_dir) = &config.output_dir {
         let output_dir: &Path = Path::new(output_dir);
