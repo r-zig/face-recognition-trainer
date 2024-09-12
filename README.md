@@ -1,6 +1,6 @@
 The **Face Recognition Trainer CLI** is a tool for automating the process of training images for facial recognition or verifying the accuracy of face recognition using Compreface or DoubleTake. It scans directories of face images, trains models, or verifies images using the respective APIs, and provides statistics on success and failure rates.
 
-![Alt Text](https://github.com/r-zig/face-recognition-trainer/blob/main/example/screenshot/cli-recognition-example-4.gif)
+![Alt Text](https://github.com/r-zig/face-recognition-trainer/blob/main/example/screenshot/cli-recongition-example-4.gif)
 
 ## Features
 - **Train or Recognize Mode**: Train images for facial recognition based on directory names, or verify the recognition of faces in images.
