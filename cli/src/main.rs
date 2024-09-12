@@ -4,7 +4,8 @@ use compreface_api::{recognize, train};
 use dotenv::dotenv;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use shared_api::{
-    ClientMode, Configuration, FaceProcessingResult, ProcessProgress, ProgressReporter,
+    ClientMode, Configuration, ErrorBehavior, FaceProcessingResult, ProcessProgress,
+    ProgressReporter,
 };
 use tokio::task::{self, JoinHandle};
 use tracing::{debug, error, info, warn};
@@ -119,21 +120,28 @@ async fn write_failures(
     config: &Configuration,
     result: FaceProcessingResult,
 ) -> Result<(), anyhow::Error> {
+    if config.error_behavior == ErrorBehavior::Ignore {
+        return Ok(());
+    }
+
     if let Some(output_dir) = &config.output_dir {
         let output_dir: &Path = Path::new(output_dir);
         if result.failure_count > 0 {
             let sub_folder = output_dir.join("failure_faces");
-            write_all_faces(sub_folder, result.failure_faces).await?;
+            write_all_faces(config.error_behavior, sub_folder, result.failure_faces).await?;
         }
         if result.missed_count > 0 {
             let sub_folder = output_dir.join("missed_faces");
-            write_all_faces(sub_folder, result.missed_faces).await?;
+            write_all_faces(config.error_behavior, sub_folder, result.missed_faces).await?;
         }
+    } else {
+        error!("output_dir is not set, so the missing and failures files will not be written");
     }
     Ok(())
 }
 
 async fn write_all_faces(
+    error_behavior: ErrorBehavior,
     sub_folder: std::path::PathBuf,
     files: Vec<std::path::PathBuf>,
 ) -> Result<(), anyhow::Error> {
@@ -143,7 +151,18 @@ async fn write_all_faces(
         tokio::fs::create_dir_all(&person_folder).await?;
         let file_name = path.file_name().unwrap().to_str().unwrap();
         let new_path = person_folder.join(file_name);
-        tokio::fs::copy(&path, &new_path).await?;
+        match error_behavior {
+            ErrorBehavior::Copy => {
+                tokio::fs::copy(&path, &new_path).await?;
+            }
+            ErrorBehavior::Move => tokio::fs::rename(&path, &new_path).await?,
+            ErrorBehavior::Ignore => {
+                warn!(
+                    "Ignoring the error behavior, so the file: {} will not be copy or moved",
+                    path.display()
+                );
+            }
+        }
     }
     Ok(())
 }
