@@ -206,6 +206,12 @@ pub struct Configuration {
     /// When set, it will save the output to this path
     #[clap(long, env = "OUTPUT_DIR", default_value = None)]
     pub output_dir: Option<String>,
+
+    /// Error behavior mode - should the process copy, move or ignore the error files
+    /// The default value is Ignore
+    /// Possible values are: Copy, Move, Ignore
+    #[clap(long, env = "ERROR_BEHAVIOR", default_value = "Ignore")]
+    pub error_behavior: ErrorBehavior,
 }
 
 impl Configuration {
@@ -240,6 +246,13 @@ pub enum ClientType {
 pub enum ClientMode {
     Train,
     Recognize,
+}
+
+#[derive(ValueEnum, Clone, Debug, PartialEq, Copy)]
+pub enum ErrorBehavior {
+    Copy,
+    Move,
+    Ignore,
 }
 
 pub async fn process_files<T, F, Fut>(
