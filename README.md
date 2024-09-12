@@ -42,7 +42,7 @@ Default: 10485760 (10MB)
 Example: --max-request-size 5242880  
  (5MB)
 
-## --override-trained-name:
+#### --override-trained-name:
 Optionally override the name for all scanned faces, ignoring the folder name.  
 Example: --override-trained-name "John_Doe"
 
@@ -62,6 +62,22 @@ The problematic images will be moved to the output directory.
 The problematic images will be ignored and no action will be taken.  
 Default: ignore  
 Example: --error-behavior move
+
+### Environment Variables
+
+Alternatively, you can configure the tool using environment variables:
+
+| Environment Variable     | Description                                             | Example Value                               |
+|--------------------------|---------------------------------------------------------|---------------------------------------------|
+| `DATASET_PATH`           | Path to the root directory of the dataset.              | `~/datasets/faces/un-trained`               |
+| `OUTPUT_DIR`             | Directory to store failed or unrecognized images.       | `~/datasets/faces/errors`                   |
+| `ERROR_BEHAVIOR`         | Error behavior (copy, move, or ignore).                 | `ignore`                                    |
+| `DOUBLE_TAKE_URL`        | URL for the DoubleTake API.                             | `http://localhost:3000`                     |
+| `COMPREFACE_URL`         | URL for the CompreFace API.                             | `http://10.100.102.5:31844`                 |
+| `COMPREFACE_API_KEY`     | API key for the CompreFace service.                     | `"0e2cb33e-fbdf-4fb7-aea5-f293deeb339d"`    |
+| `OVERRIDE_TRAINED_NAME`  | Name for all faces if you want to override the folder names. | `"unknown"`                                 |
+| `RUST_LOG`               | Logging level for the Rust application.                 | `"info"`                                    |
+
 
 ### CompreFace Setup
 To use the CompreFace service, you need to generate an API key:  
