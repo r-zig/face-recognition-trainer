@@ -188,7 +188,7 @@ pub struct Configuration {
     pub compreface: Option<CompreFaceConfig>,
 
     /// The data set root folder with the face images
-    #[clap(long, env = "DATASET_PATH", default_value = ".")]
+    #[clap(long, env = "DATASET_PATH")]
     pub dataset_path: String,
 
     /// The maximum size of the request to send to the double-take service
@@ -210,7 +210,7 @@ pub struct Configuration {
     /// Error behavior mode - should the process copy, move or ignore the error files
     /// The default value is Ignore
     /// Possible values are: Copy, Move, Ignore
-    #[clap(long, env = "ERROR_BEHAVIOR", default_value = "Ignore")]
+    #[clap(long, env = "ERROR_BEHAVIOR", default_value = "ignore")]
     pub error_behavior: ErrorBehavior,
 }
 
