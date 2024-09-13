@@ -127,4 +127,4 @@ Example for debugging:
 Ron Zigelman ([@r-zig](https://github.com/r-zig))
 
 ## License
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [Apache License 2.0](LICENSE).
