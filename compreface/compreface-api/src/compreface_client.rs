@@ -5,7 +5,10 @@ use compreface_contracts::CompreFaceConfig;
 use mime_guess::MimeGuess;
 use reqwest::{multipart::Part, Client};
 use serde::Deserialize;
-use shared_api::{FaceProcessingResult, ProgressReporter, Recognizer, Subject, Trainer};
+use shared_api::{
+    FaceProcessingResult, FaceWithMetadata, FailureFace, ProgressReporter, Recognizer, Subject,
+    Trainer,
+};
 use tokio::{fs, io::AsyncReadExt, sync::mpsc::Sender};
 use tracing::{debug, error};
 
@@ -108,7 +111,9 @@ impl Trainer for CompreFaceClient {
                         &response.text().await?
                     );
                     recognition_result.failure_count += 1;
-                    recognition_result.failure_faces.push(file_path);
+                    recognition_result
+                        .failure_faces
+                        .push(FailureFace::Train(file_path));
                     continue;
                 }
             }
@@ -197,7 +202,12 @@ impl Recognizer for CompreFaceClient {
                         recognition_result.success_count += 1;
                     } else {
                         recognition_result.failure_count += 1;
-                        recognition_result.failure_faces.push(file_path);
+                        recognition_result
+                            .failure_faces
+                            .push(FailureFace::Recognize(FaceWithMetadata {
+                                path: file_path,
+                                subjects: response.get_subjects(),
+                            }));
                     }
                 }
                 Err(e) => {
@@ -222,6 +232,15 @@ impl Recognizer for CompreFaceClient {
 #[derive(Deserialize, Debug)]
 struct RecognitionApiResponse {
     result: Vec<ResultItem>,
+}
+
+impl RecognitionApiResponse {
+    fn get_subjects(&self) -> Vec<Subject> {
+        self.result
+            .iter()
+            .flat_map(|r| r.subjects.clone())
+            .collect()
+    }
 }
 
 #[derive(Deserialize, Debug)]

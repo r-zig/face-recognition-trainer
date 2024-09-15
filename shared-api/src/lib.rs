@@ -81,7 +81,7 @@ pub struct FaceProcessingResult {
     pub failure_count: usize,
 
     /// The list of faces that were not recognized because of a match
-    pub failure_faces: Vec<PathBuf>,
+    pub failure_faces: Vec<FailureFace>,
 
     /// The number of faces that was unable to be processed (for example, when api query fails)
     pub missed_count: usize,
@@ -90,6 +90,20 @@ pub struct FaceProcessingResult {
     pub missed_faces: Vec<PathBuf>,
 
     pub context: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum FailureFace {
+    Train(PathBuf),              // For training mode, only the path is relevant
+    Recognize(FaceWithMetadata), // For recognition mode, include the extra struct
+}
+
+#[derive(Debug, Clone)]
+pub struct FaceWithMetadata {
+    /// The path to the image file
+    pub path: PathBuf,
+    /// one or more subjects that were recognized for this face
+    pub subjects: Vec<Subject>,
 }
 
 impl Display for FaceProcessingResult {
@@ -163,13 +177,15 @@ where
     IncreaseLength(u64),
     /// Set the progress message
     Message(String),
+    /// Send the partial result of a single api call
+    PartialStructedMessage(T),
     /// Send the accumulated result of the progress
     AccumulatedStructedMessage(T),
     /// Finish the progress with the given message
     FinishWithMessage(String),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Subject {
     pub name: String,
     #[allow(unused)]
@@ -209,23 +225,9 @@ pub struct Configuration {
     #[clap(long, env = "OVERRIDE_TRAINED_NAME")]
     pub override_trained_name: Option<String>,
 
-    /// Optional path to save the output of the failure and missing recognition
-    /// When set, it will save the output to this path
-    #[clap(long, env = "OUTPUT_DIR", default_value = None)]
-    pub output_dir: Option<String>,
-
-    /// Error behavior mode - should the process copy, move or ignore the error files
-    /// The default value is Ignore
-    /// Possible values are: Copy, Move, Ignore
-    #[clap(long, env = "ERROR_BEHAVIOR", default_value = "ignore")]
-    pub error_behavior: ErrorBehavior,
-
-    #[clap(long, env = "POST_RECOGNIZE_STRATEGY", default_value = "MaxSimilarity")]
-    pub post_recognize_strategy: PostRecognizeStrategy,
-
-    /// The threshold to use when the PostRecognizeStrategy is AboveThreshold
-    #[clap(long, env = "ABOVE_THRESHOLD", default_value = "0.95")]
-    pub above_threshold: Option<f64>,
+    /// error configuration options
+    #[clap(flatten)]
+    pub error_configuration: ErrorConfiguration,
 }
 
 impl Configuration {
@@ -262,6 +264,29 @@ pub enum ClientMode {
     Recognize,
 }
 
+// error configuration options
+#[derive(Debug, clap::Parser, Clone)]
+#[clap(name = "error-options")]
+pub struct ErrorConfiguration {
+    /// Optional path to save the output of the failure and missing recognition
+    /// When set, it will save the output to this path
+    #[clap(long, env = "OUTPUT_DIR", default_value = None)]
+    pub output_dir: Option<String>,
+
+    /// Error behavior mode - should the process copy, move or ignore the error files
+    /// The default value is Ignore
+    /// Possible values are: Copy, Move, Ignore
+    #[clap(long, env = "ERROR_BEHAVIOR", default_value = "ignore")]
+    pub error_behavior: ErrorBehavior,
+
+    #[clap(long, env = "POST_RECOGNIZE_STRATEGY", default_value = "MaxSimilarity")]
+    pub post_recognize_strategy: PostRecognizeStrategy,
+
+    /// The threshold to use when the PostRecognizeStrategy is AboveThreshold
+    #[clap(long, env = "ABOVE_THRESHOLD", default_value = "0.95")]
+    pub above_threshold: Option<f64>,
+}
+
 #[derive(ValueEnum, Clone, Debug, PartialEq, Copy)]
 pub enum ErrorBehavior {
     Copy,
@@ -284,7 +309,6 @@ pub enum ErrorBehavior {
 /// If the PostRecognizeOptions is set to AboveThreshold(0.9), the file will be copied or moved to the folders James Worthy and Michael Jordan
 /// On all cases, it will also create an empty file with the original file name and the extension .original_name
 /// so, if the original file is a.jpg, the empty file will be a.jpg.original_name
-/// and will create empty file with the name set to the value of the similarity .similarity , so if the similarity is 0.91, the empty file will be 0.91.similarity
 /// The default value is MaxSimilarity
 #[derive(ValueEnum, Clone, Debug, PartialEq, Copy)]
 pub enum PostRecognizeStrategy {
