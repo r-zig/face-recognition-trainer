@@ -3,6 +3,7 @@ use clap::{Parser, ValueEnum};
 use compreface_contracts::CompreFaceConfig;
 use double_take_contracts::DoubleTakeConfig;
 use futures::StreamExt;
+use serde::Deserialize;
 use std::{
     fmt::{Display, Formatter},
     future::Future,
@@ -167,6 +168,13 @@ where
     StructedMessage(T),
     /// Finish the progress with the given message
     FinishWithMessage(String),
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Subject {
+    pub name: String,
+    #[allow(unused)]
+    pub similarity: f64,
 }
 
 #[derive(Debug, clap::Parser, Clone)]

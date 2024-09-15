@@ -5,7 +5,7 @@ use compreface_contracts::CompreFaceConfig;
 use mime_guess::MimeGuess;
 use reqwest::{multipart::Part, Client};
 use serde::Deserialize;
-use shared_api::{FaceProcessingResult, ProgressReporter, Recognizer, Trainer};
+use shared_api::{FaceProcessingResult, ProgressReporter, Recognizer, Subject, Trainer};
 use tokio::{fs, io::AsyncReadExt, sync::mpsc::Sender};
 use tracing::{debug, error};
 
@@ -192,7 +192,7 @@ impl Recognizer for CompreFaceClient {
                     if response
                         .result
                         .iter()
-                        .any(|r| r.subjects.iter().any(|s| s.subject == name))
+                        .any(|r| r.subjects.iter().any(|s| s.name == name))
                     {
                         recognition_result.success_count += 1;
                     } else {
@@ -239,11 +239,4 @@ struct DetectionBox {
     y_max: u32,
     x_min: u32,
     y_min: u32,
-}
-
-#[derive(Deserialize, Debug)]
-struct Subject {
-    subject: String,
-    #[allow(unused)]
-    similarity: f64,
 }
