@@ -163,9 +163,8 @@ where
     IncreaseLength(u64),
     /// Set the progress message
     Message(String),
-
-    /// Current custom value
-    StructedMessage(T),
+    /// Send the accumulated result of the progress
+    AccumulatedStructedMessage(T),
     /// Finish the progress with the given message
     FinishWithMessage(String),
 }

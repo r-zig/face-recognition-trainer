@@ -62,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ClientMode::Recognize => recognize(&config, tx_recognize_progress.clone()).await?,
         };
         tx_recognize_progress
-            .send(ProgressReporter::StructedMessage(result.clone()))
+            .send(ProgressReporter::AccumulatedStructedMessage(result.clone()))
             .await?;
         tx_recognize_progress
             .send(ProgressReporter::FinishWithMessage(format!(
@@ -198,7 +198,7 @@ fn update_progress<T>(
         ProgressReporter::FinishWithMessage(message) => {
             total_progress_bar.finish_with_message(message)
         }
-        ProgressReporter::StructedMessage(message) => {
+        ProgressReporter::AccumulatedStructedMessage(message) => {
             accumulated_progress_bar.set_length(message.get_total_count() as u64);
             accumulated_progress_bar.set_position(message.get_success_count() as u64);
             accumulated_progress_bar.abandon();

@@ -34,7 +34,7 @@ pub async fn train(
                 guard.add(partial_result);
                 let report: FaceProcessingResult = guard.clone();
                 cloned_tx
-                    .send(ProgressReporter::StructedMessage(report))
+                    .send(ProgressReporter::AccumulatedStructedMessage(report))
                     .await?;
 
                 Ok(())
@@ -73,7 +73,7 @@ pub async fn recognize(
                 guard.add(partial_result);
                 let report: FaceProcessingResult = guard.clone();
                 cloned_tx
-                    .send(ProgressReporter::StructedMessage(report))
+                    .send(ProgressReporter::AccumulatedStructedMessage(report))
                     .await?;
 
                 Ok(())
