@@ -219,6 +219,13 @@ pub struct Configuration {
     /// Possible values are: Copy, Move, Ignore
     #[clap(long, env = "ERROR_BEHAVIOR", default_value = "ignore")]
     pub error_behavior: ErrorBehavior,
+
+    #[clap(long, env = "POST_RECOGNIZE_STRATEGY", default_value = "MaxSimilarity")]
+    pub post_recognize_strategy: PostRecognizeStrategy,
+
+    /// The threshold to use when the PostRecognizeStrategy is AboveThreshold
+    #[clap(long, env = "ABOVE_THRESHOLD", default_value = "0.95")]
+    pub above_threshold: Option<f64>,
 }
 
 impl Configuration {
@@ -260,6 +267,33 @@ pub enum ErrorBehavior {
     Copy,
     Move,
     Ignore,
+}
+
+/// Post recognize options, it work together with the ErrorBehavior
+/// When the error behavior is set to Copy or Move, the PostRecognizeOptions will be used to determine the behavior
+/// So, if the error behavior is set to Copy or Move, and the PostRecognizeOptions is set to MaxSimilarity,
+/// for each recognize file we will copy or move the file to the folder with the subject with the maximum similarity (one to one strategy)
+/// If the PostRecognizeOptions is set to AboveThreshold, we will copy or move the file to the folder with the subject with similarity above the threshold, so its possible to get multiple files per original one recognized file
+/// Example: we have file a.jpg in the folder Magic Johnson and the recognize process did not found it,
+/// but found 4 possible subjects:
+///     Michael Jordan with similarity 0.91,
+///     Larry bird with similarity 0.6,
+///     James worthy with similarity 0.93
+///     Lebron James with similarity 0.85
+/// If the PostRecognizeOptions is set to MaxSimilarity, the file will be copied or moved to the folder James Worthy (the subject with the maximum similarity)
+/// If the PostRecognizeOptions is set to AboveThreshold(0.9), the file will be copied or moved to the folders James Worthy and Michael Jordan
+/// On all cases, it will also create an empty file with the original file name and the extension .original_name
+/// so, if the original file is a.jpg, the empty file will be a.jpg.original_name
+/// and will create empty file with the name set to the value of the similarity .similarity , so if the similarity is 0.91, the empty file will be 0.91.similarity
+/// The default value is MaxSimilarity
+#[derive(ValueEnum, Clone, Debug, PartialEq, Copy)]
+pub enum PostRecognizeStrategy {
+    /// only copy or move the file to the output folder and keep the original file name
+    KeepAsIs,
+    /// use the subject with the maximum similarity
+    MaxSimilarity,
+    /// use all subjects with similarity above the threshold
+    AboveThreshold,
 }
 
 pub async fn process_files<T, F, Fut>(
