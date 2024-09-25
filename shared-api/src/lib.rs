@@ -22,7 +22,7 @@ pub trait Trainer {
         &self,
         name: &str,
         files: Vec<PathBuf>,
-        progress_reporter_tx: Sender<ProgressReporter<FaceProcessingResult>>,
+        progress_reporter_tx: Sender<ProgressReporter>,
     ) -> anyhow::Result<FaceProcessingResult>;
 }
 
@@ -31,20 +31,20 @@ pub trait TrainLogic {
     async fn train(
         &self,
         config: &Configuration,
-        tx: Sender<ProgressReporter<FaceProcessingResult>>,
+        tx: Sender<ProgressReporter>,
     ) -> anyhow::Result<FaceProcessingResult>;
 }
 
 #[async_trait]
 impl<F, Fut> TrainLogic for F
 where
-    F: Fn(&Configuration, Sender<ProgressReporter<FaceProcessingResult>>) -> Fut + Send + Sync,
+    F: Fn(&Configuration, Sender<ProgressReporter>) -> Fut + Send + Sync,
     Fut: Future<Output = anyhow::Result<FaceProcessingResult>> + Send,
 {
     async fn train(
         &self,
         config: &Configuration,
-        tx: Sender<ProgressReporter<FaceProcessingResult>>,
+        tx: Sender<ProgressReporter>,
     ) -> anyhow::Result<FaceProcessingResult> {
         (self)(config, tx).await
     }
@@ -64,7 +64,7 @@ pub trait Recognizer {
         &self,
         name: &str,
         files: Vec<PathBuf>,
-        progress_reporter_tx: Sender<ProgressReporter<FaceProcessingResult>>,
+        progress_reporter_tx: Sender<ProgressReporter>,
     ) -> anyhow::Result<FaceProcessingResult>;
 }
 
@@ -167,10 +167,7 @@ impl Clone for FaceProcessingResult {
     }
 }
 /// ProgressReporter enum to report the progress of the training or recognition operation
-pub enum ProgressReporter<T>
-where
-    T: ProcessProgress + Clone + std::marker::Sync + std::marker::Send + 'static,
-{
+pub enum ProgressReporter {
     /// Increase the progress fill by the given value
     Increase(u64),
     /// Increase the progress length by the given value
@@ -178,16 +175,16 @@ where
     /// Set the progress message
     Message(String),
     /// Send the partial result of a single api call
-    PartialStructedMessage(T),
+    PartialStructedMessage(FaceProcessingResult),
     /// Send the accumulated result of the progress
-    AccumulatedStructedMessage(T),
+    AccumulatedStructedMessage(FaceProcessingResult),
     /// Finish the progress with the given message
     FinishWithMessage(String),
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Subject {
-    pub name: String,
+    pub subject: String,
     #[allow(unused)]
     pub similarity: f64,
 }
@@ -320,15 +317,14 @@ pub enum PostRecognizeStrategy {
     AboveThreshold,
 }
 
-pub async fn process_files<T, F, Fut>(
+pub async fn process_files<F, Fut>(
     config: &Configuration,
-    tx: Sender<ProgressReporter<T>>,
+    tx: Sender<ProgressReporter>,
     api_action: F,
 ) -> anyhow::Result<()>
 where
-    F: Fn(String, Vec<PathBuf>, Sender<ProgressReporter<T>>) -> Fut + Send + Sync,
+    F: Fn(String, Vec<PathBuf>, Sender<ProgressReporter>) -> Fut + Send + Sync,
     Fut: Future<Output = anyhow::Result<()>> + Send,
-    T: Clone + ProcessProgress + std::marker::Sync + std::marker::Send + 'static,
 {
     tx.send(ProgressReporter::Message(format!(
         "Start processing directory: {}",

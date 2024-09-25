@@ -59,6 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tx_recognize_progress, mut rx_recognize_progress) = tokio::sync::mpsc::channel(2);
 
     let client_mode = config.client_mode.clone();
+    let error_configuration = config.error_configuration.clone();
     // spawn the async task that will run the logic, let the ui get the updates while the long process is running
     let long_task = task::spawn(async move {
         let result = match config.client_mode {
@@ -82,20 +83,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match client_mode {
             ClientMode::Train => {
                 while let Some(progress_report) = rx_train_progress.recv().await {
-                    on_progress::<FaceProcessingResult>(
+                    on_progress(
                         progress_report,
                         &total_progress_bar,
                         &accumulated_progress_bar,
-                    );
+                        &error_configuration,
+                    )
+                    .await;
                 }
             }
             ClientMode::Recognize => {
                 while let Some(progress_report) = rx_recognize_progress.recv().await {
-                    on_progress::<FaceProcessingResult>(
+                    on_progress(
                         progress_report,
                         &total_progress_bar,
                         &accumulated_progress_bar,
-                    );
+                        &error_configuration,
+                    )
+                    .await;
                 }
             }
         };
@@ -175,8 +180,8 @@ async fn write_all_failure_faces(
         let person_folder = sub_folder.join(source_path.parent().unwrap().file_stem().unwrap());
         tokio::fs::create_dir_all(&person_folder).await?;
         let file_name = source_path.file_name().unwrap().to_str().unwrap();
-        // create the metadata files in the folder
-        File::create(person_folder.join(file_name).join(".original_name")).await?;
+        // // create the metadata files in the folder
+        // File::create(person_folder.join(file_name).join(".original_name")).await?;
 
         // act based on the strategy to save the file
         let target_files: Vec<PathBuf> = match failure_face {
@@ -194,7 +199,7 @@ async fn write_all_failure_faces(
                             .iter()
                             .max_by_key(|item| (item.similarity * 1000.0) as u32)
                         {
-                            vec![person_folder.join(subject.name.clone())]
+                            vec![person_folder.join(subject.subject.clone())]
                         } else {
                             bail!("Failed to find the max similarity subject for the file: {}, # of subjects: {}",
                                 source_path.display(),
@@ -205,7 +210,7 @@ async fn write_all_failure_faces(
                         .subjects
                         .iter()
                         .filter(|item| item.similarity > config.above_threshold.unwrap())
-                        .map(|item| person_folder.join(item.name.clone()))
+                        .map(|item| person_folder.join(item.subject.clone()))
                         .collect()],
                 }
             }
@@ -236,18 +241,12 @@ async fn flatten<T>(handle: JoinHandle<Result<T, anyhow::Error>>) -> Result<T, a
     }
 }
 
-fn on_progress<T>(
-    progress_report: ProgressReporter<T>,
+async fn on_progress(
+    progress_report: ProgressReporter,
     total_progress_bar: &ProgressBar,
     accumulated_progress_bar: &ProgressBar,
-) where
-    T: core::fmt::Display
-        + ProcessProgress
-        + Clone
-        + std::marker::Sync
-        + std::marker::Send
-        + 'static,
-{
+    error_configuration: &ErrorConfiguration,
+) {
     match progress_report {
         ProgressReporter::Increase(len) => {
             total_progress_bar.inc(len);
@@ -259,12 +258,12 @@ fn on_progress<T>(
         ProgressReporter::FinishWithMessage(message) => {
             total_progress_bar.finish_with_message(message)
         }
-        ProgressReporter::PartialStructedMessage(message) => {
+        ProgressReporter::PartialStructedMessage(result) => {
             // write the missing and failures files to the file
-            // write_failures(&config.error_configuration, message.)
-            // .await.map_err(|e| {
-            //     warn!("Failed to write the missing and failures files, but the process finished. error: {}", e);
-            // });
+            let _ = write_failures(&error_configuration, result)
+            .await.inspect_err(|e| {
+                warn!("Failed to write the missing and failures files, but the process continue. error: {}", e);
+            });
         }
         ProgressReporter::AccumulatedStructedMessage(message) => {
             accumulated_progress_bar.set_length(message.get_total_count() as u64);

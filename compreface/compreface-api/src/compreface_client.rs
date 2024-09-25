@@ -31,7 +31,7 @@ impl Trainer for CompreFaceClient {
         &self,
         name: &str,
         files: Vec<PathBuf>,
-        progress_reporter_tx: Sender<ProgressReporter<FaceProcessingResult>>,
+        progress_reporter_tx: Sender<ProgressReporter>,
     ) -> anyhow::Result<FaceProcessingResult> {
         // this is postman example: {{compreface_base_url}}/api/v1/recognition/faces?subject={{subject_name}}
         let url = format!(
@@ -128,7 +128,7 @@ impl Recognizer for CompreFaceClient {
         &self,
         name: &str,
         files: Vec<PathBuf>,
-        progress_reporter_tx: Sender<ProgressReporter<FaceProcessingResult>>,
+        progress_reporter_tx: Sender<ProgressReporter>,
     ) -> anyhow::Result<FaceProcessingResult> {
         // this is postman example: {{compreface_base_url}}/api/v1/recognition/recognize
         let url = format!(
@@ -192,34 +192,42 @@ impl Recognizer for CompreFaceClient {
                     continue;
                 }
             };
-            match response.json::<RecognitionApiResponse>().await {
-                Ok(response) => {
-                    if response
-                        .result
-                        .iter()
-                        .any(|r| r.subjects.iter().any(|s| s.name == name))
-                    {
-                        recognition_result.success_count += 1;
-                    } else {
-                        recognition_result.failure_count += 1;
-                        recognition_result
-                            .failure_faces
-                            .push(FailureFace::Recognize(FaceWithMetadata {
-                                path: file_path,
-                                subjects: response.get_subjects(),
-                            }));
+            if response.status().is_success() {
+                match response.json::<RecognitionApiResponse>().await {
+                    Ok(response) => {
+                        if response
+                            .result
+                            .iter()
+                            .any(|r| r.subjects.iter().any(|s| s.subject == name))
+                        {
+                            recognition_result.success_count += 1;
+                        } else {
+                            recognition_result.failure_count += 1;
+                            recognition_result
+                                .failure_faces
+                                .push(FailureFace::Recognize(FaceWithMetadata {
+                                    path: file_path,
+                                    subjects: response.get_subjects(),
+                                }));
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            "Failed to parse JSON response for file: {} for name: {} Error: {}",
+                            file_path.display(),
+                            name,
+                            e
+                        );
+                        recognition_result.missed_count += 1;
+                        recognition_result.missed_faces.push(file_path);
                     }
                 }
-                Err(e) => {
-                    error!(
-                        "Failed to parse JSON response for file: {} for name: {} Error: {}",
-                        file_path.display(),
-                        name,
-                        e
-                    );
-                    recognition_result.missed_count += 1;
-                    recognition_result.missed_faces.push(file_path);
-                }
+            } else {
+                error!("Failure response. status code: {}", response.status());
+                recognition_result.missed_count += 1;
+                recognition_result.missed_faces.push(file_path);
+                let error = response.json::<ErrorResponse>().await?;
+                error!("Detailed error: {:?}", error);
             }
             progress_reporter_tx
                 .send(ProgressReporter::Increase(1))
@@ -227,6 +235,13 @@ impl Recognizer for CompreFaceClient {
         }
         Ok(recognition_result)
     }
+}
+
+#[derive(Deserialize, Debug)]
+#[allow(unused)]
+struct ErrorResponse {
+    message: String,
+    code: i32,
 }
 
 #[derive(Deserialize, Debug)]
