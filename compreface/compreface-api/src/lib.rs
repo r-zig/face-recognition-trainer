@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 pub async fn train(
     config: &Configuration,
-    progress_reporter_tx: Sender<ProgressReporter<FaceProcessingResult>>,
+    progress_reporter_tx: Sender<ProgressReporter>,
 ) -> anyhow::Result<FaceProcessingResult> {
     let api_client = Arc::new(CompreFaceClient::new(config.compreface.clone().unwrap()));
     let state = Arc::new(Mutex::new(FaceProcessingResult::with_context(
@@ -34,7 +34,7 @@ pub async fn train(
                 guard.add(partial_result);
                 let report: FaceProcessingResult = guard.clone();
                 cloned_tx
-                    .send(ProgressReporter::StructedMessage(report))
+                    .send(ProgressReporter::AccumulatedStructedMessage(report))
                     .await?;
 
                 Ok(())
@@ -48,7 +48,7 @@ pub async fn train(
 
 pub async fn recognize(
     config: &Configuration,
-    progress_reporter_tx: Sender<ProgressReporter<FaceProcessingResult>>,
+    progress_reporter_tx: Sender<ProgressReporter>,
 ) -> anyhow::Result<FaceProcessingResult> {
     let api_client = Arc::new(CompreFaceClient::new(config.compreface.clone().unwrap()));
     let state = Arc::new(Mutex::new(FaceProcessingResult::with_context(
@@ -68,12 +68,19 @@ pub async fn recognize(
                 let partial_result = api_client
                     .recognize(&name, files, process_progress_reporter_tx)
                     .await?;
+
+                // send the partial result, before accumulating it
+                cloned_tx
+                    .send(ProgressReporter::PartialStructedMessage(
+                        partial_result.clone(),
+                    ))
+                    .await?;
                 // accumulate the result
                 let mut guard = cloned_result.lock().await;
                 guard.add(partial_result);
                 let report: FaceProcessingResult = guard.clone();
                 cloned_tx
-                    .send(ProgressReporter::StructedMessage(report))
+                    .send(ProgressReporter::AccumulatedStructedMessage(report))
                     .await?;
 
                 Ok(())
