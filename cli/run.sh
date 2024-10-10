@@ -13,6 +13,8 @@ export DATASET_PATH=${DATASET_PATH:-~/Documents/smart-home/faces-train/lfw-funne
 # export OUTPUT_DIR=${OUTPUT_DIR:-./output-errors/}
 export OUTPUT_DIR=${OUTPUT_DIR:-~/Documents/smart-home/faces-train/errors}
 export ERROR_BEHAVIOR=${ERROR_BEHAVIOR:-move}
+export POST_RECOGNIZE_STRATEGY=${POST_RECOGNIZE_STRATEGY:-abovethreshold}
+export ABOVE_THRESHOLD=${ABOVE_THRESHOLD:-0.9}
 export DOUBLE_TAKE_URL=${DOUBLE_TAKE_URL:-http://localhost:3000}
 export COMPREFACE_URL=${COMPREFACE_URL:-http://10.100.102.5:31844}
 # recognition-with-unknown-famous-faces

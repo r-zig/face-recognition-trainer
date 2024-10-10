@@ -1,13 +1,17 @@
-use std::path::Path;
+use std::path::PathBuf;
 
+use anyhow::bail;
 use compreface_api::{recognize, train};
 use dotenv::dotenv;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use shared_api::{
-    ClientMode, Configuration, ErrorBehavior, FaceProcessingResult, ProcessProgress,
-    ProgressReporter,
+    ClientMode, Configuration, ErrorBehavior, ErrorConfiguration, FaceProcessingResult,
+    FailureFace, PostRecognizeStrategy, ProcessProgress, ProgressReporter,
 };
-use tokio::task::{self, JoinHandle};
+use tokio::{
+    fs::File,
+    task::{self, JoinHandle},
+};
 use tracing::{debug, error, info, warn};
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
@@ -55,6 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tx_recognize_progress, mut rx_recognize_progress) = tokio::sync::mpsc::channel(2);
 
     let client_mode = config.client_mode.clone();
+    let error_configuration = config.error_configuration.clone();
     // spawn the async task that will run the logic, let the ui get the updates while the long process is running
     let long_task = task::spawn(async move {
         let result = match config.client_mode {
@@ -62,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ClientMode::Recognize => recognize(&config, tx_recognize_progress.clone()).await?,
         };
         tx_recognize_progress
-            .send(ProgressReporter::StructedMessage(result.clone()))
+            .send(ProgressReporter::AccumulatedStructedMessage(result.clone()))
             .await?;
         tx_recognize_progress
             .send(ProgressReporter::FinishWithMessage(format!(
@@ -70,11 +75,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 result
             )))
             .await?;
-        // write the missing and failures files to the file
-        write_failures(&config, result).await.map_err(|e| {
-                    warn!("Failed to write the missing and failures files, but the process finished. error: {}", e);
-                    e
-                })?;
         Ok::<_, anyhow::Error>(())
     });
 
@@ -83,20 +83,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match client_mode {
             ClientMode::Train => {
                 while let Some(progress_report) = rx_train_progress.recv().await {
-                    update_progress::<FaceProcessingResult>(
+                    on_progress(
                         progress_report,
                         &total_progress_bar,
                         &accumulated_progress_bar,
-                    );
+                        &error_configuration,
+                    )
+                    .await;
                 }
             }
             ClientMode::Recognize => {
                 while let Some(progress_report) = rx_recognize_progress.recv().await {
-                    update_progress::<FaceProcessingResult>(
+                    on_progress(
                         progress_report,
                         &total_progress_bar,
                         &accumulated_progress_bar,
-                    );
+                        &error_configuration,
+                    )
+                    .await;
                 }
             }
         };
@@ -117,41 +121,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn write_failures(
-    config: &Configuration,
+    config: &ErrorConfiguration,
     result: FaceProcessingResult,
 ) -> Result<(), anyhow::Error> {
     if config.error_behavior == ErrorBehavior::Ignore {
         return Ok(());
     }
 
-    if let Some(output_dir) = &config.output_dir {
-        let output_dir: &Path = Path::new(output_dir);
-        if result.failure_count > 0 {
-            let sub_folder = output_dir.join("failure_faces");
-            write_all_faces(config.error_behavior, sub_folder, result.failure_faces).await?;
-        }
-        if result.missed_count > 0 {
-            let sub_folder = output_dir.join("missed_faces");
-            write_all_faces(config.error_behavior, sub_folder, result.missed_faces).await?;
-        }
-    } else {
-        error!("output_dir is not set, so the missing and failures files will not be written");
+    if result.failure_count > 0 {
+        write_all_failure_faces(config, result.failure_faces).await?;
+    }
+    if result.missed_count > 0 {
+        write_all_missing_faces(config, result.missed_faces).await?;
     }
     Ok(())
 }
 
-async fn write_all_faces(
-    error_behavior: ErrorBehavior,
-    sub_folder: std::path::PathBuf,
+async fn write_all_missing_faces(
+    config: &ErrorConfiguration,
     files: Vec<std::path::PathBuf>,
 ) -> Result<(), anyhow::Error> {
+    let sub_folder = PathBuf::from(config.output_dir.as_ref().unwrap()).join("missed_faces");
     tokio::fs::create_dir_all(&sub_folder).await?;
     for path in files {
         let person_folder = sub_folder.join(path.parent().unwrap().file_stem().unwrap());
         tokio::fs::create_dir_all(&person_folder).await?;
         let file_name = path.file_name().unwrap().to_str().unwrap();
         let new_path = person_folder.join(file_name);
-        match error_behavior {
+        match config.error_behavior {
             ErrorBehavior::Copy => {
                 tokio::fs::copy(&path, &new_path).await?;
             }
@@ -167,6 +164,75 @@ async fn write_all_faces(
     Ok(())
 }
 
+async fn write_all_failure_faces(
+    config: &ErrorConfiguration,
+    faces: Vec<FailureFace>,
+) -> Result<(), anyhow::Error> {
+    let sub_folder = PathBuf::from(config.output_dir.as_ref().unwrap()).join("failure_faces");
+    tokio::fs::create_dir_all(&sub_folder).await?;
+    for failure_face in faces {
+        let source_path = match failure_face {
+            FailureFace::Train(ref path) => path.clone(),
+            FailureFace::Recognize(ref m) => m.path.clone(),
+        };
+
+        // create the folder for the person
+        let person_folder = sub_folder.join(source_path.parent().unwrap().file_stem().unwrap());
+        tokio::fs::create_dir_all(&person_folder).await?;
+        let file_name = source_path.file_name().unwrap().to_str().unwrap();
+        // // create the metadata files in the folder
+        // File::create(person_folder.join(file_name).join(".original_name")).await?;
+
+        // act based on the strategy to save the file
+        let target_files: Vec<PathBuf> = match failure_face {
+            FailureFace::Train(_) => {
+                // we should save the file as is
+                vec![person_folder.join(file_name)]
+            }
+            FailureFace::Recognize(m) => {
+                // we should save the file with the recognize suffix
+                match config.post_recognize_strategy {
+                    PostRecognizeStrategy::KeepAsIs => vec![person_folder.join(file_name)],
+                    PostRecognizeStrategy::MaxSimilarity => {
+                        if let Some(subject) = m
+                            .subjects
+                            .iter()
+                            .max_by_key(|item| (item.similarity * 1000.0) as u32)
+                        {
+                            vec![person_folder.join(subject.subject.clone())]
+                        } else {
+                            bail!("Failed to find the max similarity subject for the file: {}, # of subjects: {}",
+                                source_path.display(),
+                                m.subjects.len());
+                        }
+                    }
+                    PostRecognizeStrategy::AboveThreshold => vec![m
+                        .subjects
+                        .iter()
+                        .filter(|item| item.similarity > config.above_threshold.unwrap())
+                        .map(|item| person_folder.join(item.subject.clone()))
+                        .collect()],
+                }
+            }
+        };
+
+        // move the file if there is only one target file
+        if target_files.len() == 1 && config.error_behavior == ErrorBehavior::Move {
+            tokio::fs::rename(&source_path, &target_files.first().unwrap()).await?;
+        } else {
+            for new_path in target_files {
+                tokio::fs::copy(&source_path, &new_path).await?;
+            }
+
+            // should remove the source file if the error behavior is move - after completing the copy
+            if config.error_behavior == ErrorBehavior::Move {
+                tokio::fs::remove_file(&source_path).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn flatten<T>(handle: JoinHandle<Result<T, anyhow::Error>>) -> Result<T, anyhow::Error> {
     match handle.await {
         Ok(Ok(result)) => Ok(result),
@@ -175,18 +241,12 @@ async fn flatten<T>(handle: JoinHandle<Result<T, anyhow::Error>>) -> Result<T, a
     }
 }
 
-fn update_progress<T>(
-    progress_report: ProgressReporter<T>,
+async fn on_progress(
+    progress_report: ProgressReporter,
     total_progress_bar: &ProgressBar,
     accumulated_progress_bar: &ProgressBar,
-) where
-    T: core::fmt::Display
-        + ProcessProgress
-        + Clone
-        + std::marker::Sync
-        + std::marker::Send
-        + 'static,
-{
+    error_configuration: &ErrorConfiguration,
+) {
     match progress_report {
         ProgressReporter::Increase(len) => {
             total_progress_bar.inc(len);
@@ -198,7 +258,14 @@ fn update_progress<T>(
         ProgressReporter::FinishWithMessage(message) => {
             total_progress_bar.finish_with_message(message)
         }
-        ProgressReporter::StructedMessage(message) => {
+        ProgressReporter::PartialStructedMessage(result) => {
+            // write the missing and failures files to the file
+            let _ = write_failures(&error_configuration, result)
+            .await.inspect_err(|e| {
+                warn!("Failed to write the missing and failures files, but the process continue. error: {}", e);
+            });
+        }
+        ProgressReporter::AccumulatedStructedMessage(message) => {
             accumulated_progress_bar.set_length(message.get_total_count() as u64);
             accumulated_progress_bar.set_position(message.get_success_count() as u64);
             accumulated_progress_bar.abandon();

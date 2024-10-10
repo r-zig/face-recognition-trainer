@@ -1,5 +1,6 @@
 The **Face Recognition Trainer CLI** is a tool for automating the process of training images for facial recognition or verifying the accuracy of face recognition using Compreface or DoubleTake. It scans directories of face images, trains models, or verifies images using the respective APIs, and provides statistics on success and failure rates.
 
+![Alt Text](https://github.com/r-zig/face-recognition-trainer/blob/main/example/screenshot/cli-recongition-example-4.gif)
 
 ## Features
 - **Train or Recognize Mode**: Train images for facial recognition based on directory names, or verify the recognition of faces in images.
@@ -41,7 +42,7 @@ Default: 10485760 (10MB)
 Example: --max-request-size 5242880  
  (5MB)
 
-## --override-trained-name:
+#### --override-trained-name:
 Optionally override the name for all scanned faces, ignoring the folder name.  
 Example: --override-trained-name "John_Doe"
 
@@ -63,17 +64,20 @@ Default: ignore
 Example: --error-behavior move
 
 ### Environment Variables
+
 Alternatively, you can configure the tool using environment variables:
 
-Environment Variable	Description	Default Value
-DATASET_PATH	Path to the root directory of the dataset.	~/datasets/faces/un-trained
-OUTPUT_DIR	Directory to store failed or unrecognized images.	~/datasets/faces/errors
-ERROR_BEHAVIOR	Error behavior (copy, move, or ignore).	ignore
-DOUBLE_TAKE_URL	URL for the DoubleTake API.	http://localhost:3000
-COMPREFACE_URL	URL for the CompreFace API.	http://10.100.102.5:31844
-COMPREFACE_API_KEY	API key for the CompreFace service.	"0e2cb33e-fbdf-4fb7-aea5-f293deeb339d"
-OVERRIDE_TRAINED_NAME	Name for all faces if you want to override the folder names.	"unknown"
-RUST_LOG	Logging level for the Rust application.	"info"
+| Environment Variable     | Description                                             | Example Value                               |
+|--------------------------|---------------------------------------------------------|---------------------------------------------|
+| `DATASET_PATH`           | Path to the root directory of the dataset.              | `~/datasets/faces/un-trained`               |
+| `OUTPUT_DIR`             | Directory to store failed or unrecognized images.       | `~/datasets/faces/errors`                   |
+| `ERROR_BEHAVIOR`         | Error behavior (copy, move, or ignore).                 | `ignore`                                    |
+| `DOUBLE_TAKE_URL`        | URL for the DoubleTake API.                             | `http://localhost:3000`                     |
+| `COMPREFACE_URL`         | URL for the CompreFace API.                             | `http://10.100.102.5:31844`                 |
+| `COMPREFACE_API_KEY`     | API key for the CompreFace service.                     | `"0e2cb33e-fbdf-4fb7-aea5-f293deeb339d"`    |
+| `OVERRIDE_TRAINED_NAME`  | Name for all faces if you want to override the folder names. | `"unknown"`                                 |
+| `RUST_LOG`               | Logging level for the Rust application.                 | `"info"`                                    |
+
 
 ### CompreFace Setup
 To use the CompreFace service, you need to generate an API key:  
@@ -123,4 +127,4 @@ Example for debugging:
 Ron Zigelman ([@r-zig](https://github.com/r-zig))
 
 ## License
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [Apache License 2.0](LICENSE).
